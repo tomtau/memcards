@@ -1,0 +1,10 @@
+[package]
+name = "memcards"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.1"
+shuttle-axum = "0.56.0"
+shuttle-runtime = "0.56.0"
+tokio = "1.28.2"
