@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        {% if is_authenticated %}
+        <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" integrity="sha384-Akqfrbj/HpNVo8k11SXBb6TlBWmXXlYQrCSqEWmyKJe+hDm3Z/B2WVG4smwBkRVm" crossorigin="anonymous"></script>
+        <script>
+            htmx.on("htmx:configRequest", (e)=> {
+                e.detail.headers["authorization"] = "Bearer {{ auth_token }}";
+            });
+        </script>
+        {% endif %}
+        <link rel="stylesheet" href="/styles.css" />
+        <title>{% block title %}{{ title }} - MemCards{% endblock %}</title>
+        {% block head %}{% endblock %}
+    </head>
+    <body>
+    {% if is_authenticated %}
+        <div id="content">
+            {% block content %}
+            <p>Authenticated</p>
+            {% endblock %}
+        </div>
+    {% else %}
+    <p>Unauthenticated</p>
+    {% endif %}
+    </body>
+</html>

@@ -1,0 +1,30 @@
+{% extends "base.html" %} {% block title %}Index{% endblock %} {% block content
+%}
+<h1>MemCards</h1>
+<form id="add-deck">
+    <input
+        placeholder="Your flashcard deck name..."
+        required
+        type="text"
+        name="name"
+    />
+    <button
+        hx-post="/decks"
+        hx-trigger="click"
+        hx-target="#decks-content"
+        hx-swap="beforeend"
+    >
+        Add
+    </button>
+</form>
+<div
+    id="list"
+    hx-get="/decks"
+    hx-target="this"
+    hx-trigger="load"
+    hx-swap="outerHTML"
+>
+    Loading...
+</div>
+
+{% endblock %}

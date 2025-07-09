@@ -1,0 +1,13 @@
+<div id="decks">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Delete</th>
+            </tr>
+        </thead>
+        <tbody id="decks-content">
+            {% for deck in decks %} {% include "deck.html" %} {% endfor %}
+        </tbody>
+    </table>
+</div>

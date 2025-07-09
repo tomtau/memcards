@@ -1,0 +1,13 @@
+<tr id="shuttle-deck-{{ deck.id }}">
+    <td id="shuttle-deck-name-{{deck.id}}">{{ deck.name }}</td>
+    <td>
+        <button
+            hx-delete="/decks/{{deck.id}}"
+            hx-trigger="click"
+            hx-target="#shuttle-deck-{{deck.id}}"
+            hx-swap="delete"
+        >
+            Delete
+        </button>
+    </td>
+</tr>
