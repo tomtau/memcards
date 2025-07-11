@@ -1,13 +1,78 @@
 <tr id="shuttle-deck-{{ deck.id }}">
-    <td id="shuttle-deck-name-{{deck.id}}">{{ deck.name }}</td>
     <td>
-        <button
-            hx-delete="/decks/{{deck.id}}"
-            hx-trigger="click"
-            hx-target="#shuttle-deck-{{deck.id}}"
-            hx-swap="delete"
-        >
-            Delete
-        </button>
+        <span class="deck-name">{{ deck.name }}</span>
+    </td>
+    <td>
+        <div class="deck-actions">
+            <button
+                class="btn btn-primary"
+                onclick="editDeck({{deck.id}}, '{{ deck.name }}')"
+            >
+                Edit
+            </button>
+            <button
+                class="btn btn-danger"
+                hx-delete="/decks/{{deck.id}}"
+                hx-trigger="click"
+                hx-target="#shuttle-deck-{{deck.id}}"
+                hx-swap="delete"
+                hx-confirm="This will permanently delete the deck '{{ deck.name }}'. This action cannot be undone."
+            >
+                Delete
+            </button>
+        </div>
     </td>
 </tr>
+
+<script>
+function editDeck(deckId, currentName) {
+    Swal.fire({
+        title: 'Edit Deck Name',
+        input: 'text',
+        inputValue: currentName,
+        inputLabel: 'Deck Name',
+        inputPlaceholder: 'Enter deck name...',
+        showCancelButton: true,
+        confirmButtonText: 'Save',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#007bff',
+        cancelButtonColor: '#6c757d',
+        inputValidator: (value) => {
+            if (!value || value.trim() === '') {
+                return 'Deck name cannot be empty';
+            }
+            if (value.length > 100) {
+                return 'Deck name is too long (max 100 characters)';
+            }
+        }
+    }).then((result) => {
+        if (result.isConfirmed && result.value !== currentName) {
+            // Create a form data object
+            const formData = new FormData();
+            formData.append('name', result.value);
+            
+            // Use htmx to make the PUT request
+            htmx.ajax('PUT', `/decks/${deckId}`, {
+                values: { name: result.value },
+                target: `#shuttle-deck-${deckId}`,
+                swap: 'outerHTML'
+            }).then(() => {
+                Swal.fire({
+                    title: 'Success!',
+                    text: 'Deck name updated successfully',
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            }).catch((error) => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: 'Failed to update deck name',
+                    icon: 'error',
+                    confirmButtonColor: '#dc3545'
+                });
+            });
+        }
+    });
+}
+</script>

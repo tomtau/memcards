@@ -11,3 +11,9 @@ pub struct Deck {
 pub struct DeckNew {
     pub name: String,
 }
+
+#[derive(sqlx::FromRow, Serialize, Deserialize)]
+pub struct DeckRename {
+    pub id: i32,
+    pub name: String,
+}

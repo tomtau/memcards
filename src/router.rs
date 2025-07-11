@@ -41,7 +41,7 @@ pub fn init_router(db: PgPool, config: AppConfig) -> Router {
         .route("/webview", get(routes::webview_handler))
         .route("/styles.css", get(routes::styles))
         .route("/decks", get(routes::fetch_decks).post(routes::create_deck))
-        .route("/decks/{id}", delete(routes::delete_deck))
+        .route("/decks/{id}", delete(routes::delete_deck).put(routes::update_deck))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

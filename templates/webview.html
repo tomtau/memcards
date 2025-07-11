@@ -1,20 +1,22 @@
-{% extends "base.html" %} {% block title %}Index{% endblock %} {% block content
-%}
+{% extends "base.html" %} {% block title %}MemCards{% endblock %} {% block content %}
 <h1>MemCards</h1>
 <form id="add-deck">
     <input
-        placeholder="Your flashcard deck name..."
+        placeholder="Enter your flashcard deck name..."
         required
         type="text"
         name="name"
+        autocomplete="off"
     />
     <button
+        type="button"
         hx-post="/decks"
         hx-trigger="click"
         hx-target="#decks-content"
         hx-swap="beforeend"
+        hx-include="#add-deck"
     >
-        Add
+        Add Deck
     </button>
 </form>
 <div
@@ -24,7 +26,30 @@
     hx-trigger="load"
     hx-swap="outerHTML"
 >
-    Loading...
+    <div style="text-align: center; padding: 2rem; background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+        <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <p style="margin-top: 1rem; color: #666; font-size: 1.1rem;">Loading your decks...</p>
+    </div>
 </div>
+
+<style>
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+
+<script>
+// Clear the form after successful deck creation
+document.body.addEventListener('htmx:afterRequest', function(event) {
+    if (event.detail.xhr.status === 200 && event.target.matches('[hx-post="/decks"]')) {
+        // Clear the form
+        const form = document.getElementById('add-deck');
+        const input = form.querySelector('input[name="name"]');
+        input.value = '';
+        input.focus();
+    }
+});
+</script>
 
 {% endblock %}

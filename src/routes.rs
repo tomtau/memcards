@@ -1,9 +1,11 @@
-use std::sync::Arc;
+mod deck;
+
+pub use deck::*;
 
 use askama::Template;
 use axum::{
-    Extension, Form,
-    extract::{Path, Query, State},
+    Extension,
+    extract::Query,
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
@@ -11,15 +13,10 @@ use serde::Deserialize;
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    config::AppConfig,
-    errors::ApiError,
-    models::{Deck, DeckNew},
-    router::AppState,
-    sdk::{AuthUser, verify_signed_user_token},
-    templates::{self, WebViewTemplate},
+    config::AppConfig, errors::ApiError, sdk::verify_signed_user_token, templates::WebViewTemplate,
 };
 
-fn handle_render(res: askama::Result<String>) -> Result<Html<String>, ApiError> {
+pub(self) fn handle_render(res: askama::Result<String>) -> Result<Html<String>, ApiError> {
     match res {
         Ok(html) => Ok(Html(html)),
         Err(e) => {
@@ -29,24 +26,6 @@ fn handle_render(res: askama::Result<String>) -> Result<Html<String>, ApiError> 
     }
 }
 
-pub async fn fetch_decks(
-    Extension(AuthUser(user_id)): Extension<AuthUser>,
-    State(state): State<Arc<AppState>>,
-) -> Result<impl IntoResponse, ApiError> {
-    let user_id = user_id.ok_or(ApiError::UserNotFoundOrUnauthorized)?;
-    if user_id.is_empty() {
-        warn!("User ID is empty, returning unauthorized error");
-        return Err(ApiError::UserNotFoundOrUnauthorized);
-    }
-    let decks = sqlx::query_as::<_, Deck>("SELECT * FROM DECK WHERE USER_ID = $1")
-        .bind(&user_id)
-        .fetch_all(&state.db)
-        .await?;
-
-    let template = templates::Decks { decks };
-    handle_render(template.render())
-}
-
 pub async fn styles() -> Result<impl IntoResponse, ApiError> {
     let response = Response::builder()
         .status(StatusCode::OK)
@@ -54,37 +33,6 @@ pub async fn styles() -> Result<impl IntoResponse, ApiError> {
         .body(include_str!("../templates/styles.css").to_owned())?;
 
     Ok(response)
-}
-
-pub async fn create_deck(
-    Extension(AuthUser(user_id)): Extension<AuthUser>,
-    State(state): State<Arc<AppState>>,
-    Form(form): Form<DeckNew>,
-) -> Result<impl IntoResponse, ApiError> {
-    let deck = sqlx::query_as::<_, Deck>(
-        "INSERT INTO DECK (name, user_id) VALUES ($1, $2) RETURNING id, name, user_id",
-    )
-    .bind(form.name)
-    .bind(user_id)
-    .fetch_one(&state.db)
-    .await?;
-
-    let template = templates::DeckNewTemplate { deck };
-    handle_render(template.render())
-}
-
-pub async fn delete_deck(
-    Extension(AuthUser(user_id)): Extension<AuthUser>,
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<i32>,
-) -> Result<impl IntoResponse, ApiError> {
-    sqlx::query("DELETE FROM DECK WHERE ID = $1 AND USER_ID = $2")
-        .bind(id)
-        .bind(user_id)
-        .execute(&state.db)
-        .await?;
-
-    Ok(StatusCode::OK)
 }
 
 #[derive(Deserialize)]

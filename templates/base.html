@@ -3,9 +3,30 @@
     <head>
         {% if is_authenticated %}
         <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js" integrity="sha384-Akqfrbj/HpNVo8k11SXBb6TlBWmXXlYQrCSqEWmyKJe+hDm3Z/B2WVG4smwBkRVm" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script>
             htmx.on("htmx:configRequest", (e)=> {
                 e.detail.headers["authorization"] = "Bearer {{ auth_token }}";
+            });
+            
+            // Handle confirmation dialogs
+            document.addEventListener("htmx:confirm", function(e) {
+                if (!e.detail.question) return
+                e.preventDefault()
+                
+                Swal.fire({
+                    title: "Are you sure?",
+                    text: e.detail.question,
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonColor: "#dc3545",
+                    cancelButtonColor: "#6c757d",
+                    confirmButtonText: "Yes, delete it!"
+                }).then(function(result) {
+                    if (result.isConfirmed) {
+                        e.detail.issueRequest(true);
+                    }
+                })
             });
         </script>
         {% endif %}
