@@ -1,4 +1,5 @@
 use anyhow::Context;
+use axum_extra::extract::cookie::Key;
 use shuttle_runtime::SecretStore;
 use sqlx::PgPool;
 pub(crate) mod config;
@@ -27,9 +28,11 @@ async fn main(
         .get("PACKAGE_NAME")
         .context("PACKAGE_NAME not found")?;
     let api_key = secrets.get("API_KEY").context("API_KEY not found")?.into();
+    let cookie_secret = Key::generate();
     let config = config::AppConfig {
         package_name,
         api_key,
+        cookie_secret,
         user_token_public_key: secrets
             .get("USER_TOKEN_PUBLIC_KEY")
             .unwrap_or(default_user_token_public_key),

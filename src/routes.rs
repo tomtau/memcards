@@ -38,7 +38,7 @@ pub async fn fetch_decks(
         warn!("User ID is empty, returning unauthorized error");
         return Err(ApiError::UserNotFoundOrUnauthorized);
     }
-    let decks = sqlx::query_as::<_, Deck>("SELECT * FROM DECKS WHERE USER_ID = $1")
+    let decks = sqlx::query_as::<_, Deck>("SELECT * FROM DECK WHERE USER_ID = $1")
         .bind(&user_id)
         .fetch_all(&state.db)
         .await?;
@@ -62,7 +62,7 @@ pub async fn create_deck(
     Form(form): Form<DeckNew>,
 ) -> Result<impl IntoResponse, ApiError> {
     let deck = sqlx::query_as::<_, Deck>(
-        "INSERT INTO DECKS (name, user_id) VALUES ($1, $2) RETURNING id, name, user_id",
+        "INSERT INTO DECK (name, user_id) VALUES ($1, $2) RETURNING id, name, user_id",
     )
     .bind(form.name)
     .bind(user_id)
@@ -78,7 +78,7 @@ pub async fn delete_deck(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
-    sqlx::query("DELETE FROM DECKS WHERE ID = $1 AND USER_ID = $2")
+    sqlx::query("DELETE FROM DECK WHERE ID = $1 AND USER_ID = $2")
         .bind(id)
         .bind(user_id)
         .execute(&state.db)

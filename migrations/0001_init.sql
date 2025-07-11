@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS flashcard (
 
 CREATE TABLE IF NOT EXISTS review (
     id SERIAL PRIMARY KEY,
-    reviewed DATETIME NOT NULL,
-    scheduled DATETIME NOT NULL,
+    reviewed TIMESTAMP NOT NULL,
+    scheduled TIMESTAMP NOT NULL,
     rating TEXT NOT NULL,
     stability REAL NOT NULL,
     difficulty REAL NOT NULL,

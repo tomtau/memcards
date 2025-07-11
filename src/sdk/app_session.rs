@@ -45,7 +45,7 @@ pub struct AppSubscriptionUpdate {
     pub timestamp: String,
 }
 
-fn now_millis() -> u64 {
+pub(super) fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
