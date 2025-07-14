@@ -71,6 +71,12 @@ document.body.addEventListener('htmx:afterRequest', function(event) {
         backTextarea.value = '';
         frontTextarea.focus();
         
+        // Check if this was the first flashcard (remove "no flashcards" message)
+        const noFlashcardsMessage = document.querySelector('.no-flashcards');
+        if (noFlashcardsMessage) {
+            noFlashcardsMessage.remove();
+        }
+        
         // Show success message
         Swal.fire({
             title: 'Success!',
@@ -87,11 +93,11 @@ function editFlashcard(id, front, back) {
         title: 'Edit Flashcard',
         html: `
             <div style="text-align: left;">
-                <label for="edit-front" style="display: block; margin-bottom: 5px; font-weight: bold;">Front:</label>
-                <textarea id="edit-front" style="width: 100%; height: 80px; margin-bottom: 15px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">${front}</textarea>
+                <label for="edit-front" style="display: block; margin-bottom: 8px; font-weight: bold; font-size: 1rem;">Front:</label>
+                <textarea id="edit-front" style="width: 100%; min-height: 100px; margin-bottom: 15px; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; resize: vertical;">${front}</textarea>
                 
-                <label for="edit-back" style="display: block; margin-bottom: 5px; font-weight: bold;">Back:</label>
-                <textarea id="edit-back" style="width: 100%; height: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">${back}</textarea>
+                <label for="edit-back" style="display: block; margin-bottom: 8px; font-weight: bold; font-size: 1rem;">Back:</label>
+                <textarea id="edit-back" style="width: 100%; min-height: 100px; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; resize: vertical;">${back}</textarea>
             </div>
         `,
         showCancelButton: true,
@@ -99,7 +105,12 @@ function editFlashcard(id, front, back) {
         cancelButtonText: 'Cancel',
         confirmButtonColor: '#007bff',
         cancelButtonColor: '#6c757d',
-        width: '600px',
+        customClass: {
+            popup: 'mobile-friendly-popup'
+        },
+        heightAuto: false,
+        scrollbarPadding: false,
+        width: 'auto',
         preConfirm: () => {
             const newFront = document.getElementById('edit-front').value.trim();
             const newBack = document.getElementById('edit-back').value.trim();
@@ -145,7 +156,13 @@ function deleteFlashcard(id, front) {
         showCancelButton: true,
         confirmButtonColor: '#dc3545',
         cancelButtonColor: '#6c757d',
-        confirmButtonText: 'Yes, delete it!'
+        confirmButtonText: 'Yes, delete it!',
+        customClass: {
+            popup: 'mobile-friendly-popup'
+        },
+        heightAuto: false,
+        scrollbarPadding: false,
+        width: 'auto'
     }).then((result) => {
         if (result.isConfirmed) {
             htmx.ajax('DELETE', `/flashcards/${id}`, {

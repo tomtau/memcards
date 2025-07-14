@@ -43,6 +43,12 @@ function editDeck(deckId, currentName) {
         cancelButtonText: 'Cancel',
         confirmButtonColor: '#007bff',
         cancelButtonColor: '#6c757d',
+        customClass: {
+            popup: 'mobile-friendly-popup'
+        },
+        heightAuto: false,
+        scrollbarPadding: false,
+        width: 'auto',
         inputValidator: (value) => {
             if (!value || value.trim() === '') {
                 return 'Deck name cannot be empty';
