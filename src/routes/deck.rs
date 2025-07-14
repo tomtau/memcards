@@ -7,25 +7,15 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use tracing::warn;
 
 use crate::{
     errors::ApiError,
     models::{Deck, DeckNew},
     router::AppState,
-    routes::handle_render,
+    routes::{check_user_id, handle_render},
     sdk::AuthUser,
     templates::{self},
 };
-
-fn check_user_id(user_id: Option<String>) -> Result<String, ApiError> {
-    let user_id = user_id.ok_or(ApiError::UserNotFoundOrUnauthorized)?;
-    if user_id.is_empty() {
-        warn!("User ID is empty, returning unauthorized error");
-        return Err(ApiError::UserNotFoundOrUnauthorized);
-    }
-    Ok(user_id)
-}
 
 pub async fn fetch_decks(
     Extension(AuthUser(user_id)): Extension<AuthUser>,

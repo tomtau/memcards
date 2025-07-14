@@ -1,0 +1,9 @@
+{% for flashcard in flashcards %}
+    {% include "flashcard.html" %}
+{% endfor %}
+
+{% if flashcards.is_empty() %}
+<div class="no-flashcards">
+    <p>No flashcards yet. Create your first flashcard above!</p>
+</div>
+{% endif %}

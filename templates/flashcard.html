@@ -1,0 +1,39 @@
+<div class="flashcard-item" id="flashcard-{{ flashcard.id }}">
+    <div class="flashcard-content">
+        <div class="flashcard-side">
+            <h4>Front:</h4>
+            <p>{{ flashcard.front }}</p>
+        </div>
+        <div class="flashcard-side">
+            <h4>Back:</h4>
+            <p>{{ flashcard.back }}</p>
+        </div>
+    </div>
+    
+    <div class="flashcard-meta">
+        <div class="review-info">
+            {% if flashcard.reviews.len() > 0 %}
+                <span class="review-count">{{ flashcard.reviews.len() }} review(s)</span>
+                <span class="last-reviewed">Last: {{ flashcard.reviews[0].reviewed.format("%Y-%m-%d %H:%M") }}</span>
+                <span class="last-rating">Rating: {{ flashcard.reviews[0].rating }}</span>
+            {% else %}
+                <span class="never-reviewed">Never reviewed</span>
+            {% endif %}
+        </div>
+        
+        <div class="flashcard-actions">
+            <button 
+                class="btn btn-sm btn-primary"
+                onclick="editFlashcard({{ flashcard.id }}, `{{ flashcard.front }}`, `{{ flashcard.back }}`)"
+            >
+                Edit
+            </button>
+            <button 
+                class="btn btn-sm btn-danger"
+                onclick="deleteFlashcard({{ flashcard.id }}, `{{ flashcard.front }}`)"
+            >
+                Delete
+            </button>
+        </div>
+    </div>
+</div>

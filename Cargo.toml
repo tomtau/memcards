@@ -20,7 +20,7 @@ sha2 = "0.10.9"
 shuttle-axum = "0.56.0"
 shuttle-runtime = "0.56.0"
 shuttle-shared-db = { version = "0.56.0", features = ["postgres", "sqlx"] }
-sqlx = "0.8.2"
+sqlx = { version = "0.8.2", features = ["chrono"] }
 subtle = "2.6.1"
 time = "0.3.41"
 tokio = "1.28.2"

@@ -1,12 +1,10 @@
-use askama::Template;
-
 use crate::models;
+use askama::Template;
 
 #[derive(Template)]
 #[template(path = "webview.html")]
 pub struct WebViewTemplate {
     pub is_authenticated: bool,
-    pub auth_token: String,
 }
 
 #[derive(Template)]
@@ -19,4 +17,23 @@ pub struct Decks {
 #[template(path = "deck.html")]
 pub struct DeckNewTemplate {
     pub deck: models::Deck,
+}
+
+#[derive(Template)]
+#[template(path = "flashcards.html")]
+pub struct FlashcardsTemplate {
+    pub is_authenticated: bool,
+    pub deck: models::Deck,
+}
+
+#[derive(Template)]
+#[template(path = "flashcard.html")]
+pub struct FlashcardTemplate {
+    pub flashcard: models::FlashcardWithReviews,
+}
+
+#[derive(Template)]
+#[template(path = "flashcard_list.html")]
+pub struct FlashcardListTemplate {
+    pub flashcards: Vec<models::FlashcardWithReviews>,
 }

@@ -4,6 +4,12 @@
     </td>
     <td>
         <div class="deck-actions">
+            <a 
+                href="/decks/{{ deck.id }}/flashcards"
+                class="btn btn-secondary"
+            >
+                View Cards
+            </a>
             <button
                 class="btn btn-primary"
                 onclick="editDeck({{deck.id}}, '{{ deck.name }}')"

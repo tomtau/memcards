@@ -41,7 +41,24 @@ pub fn init_router(db: PgPool, config: AppConfig) -> Router {
         .route("/webview", get(routes::webview_handler))
         .route("/styles.css", get(routes::styles))
         .route("/decks", get(routes::fetch_decks).post(routes::create_deck))
-        .route("/decks/{id}", delete(routes::delete_deck).put(routes::update_deck))
+        .route(
+            "/decks/{id}",
+            delete(routes::delete_deck).put(routes::update_deck),
+        )
+        .route(
+            "/decks/{deck_id}/flashcards",
+            get(routes::view_flashcards_page).post(routes::create_flashcard),
+        )
+        .route(
+            "/decks/{deck_id}/flashcards/list",
+            get(routes::list_flashcards_page),
+        )
+        .route(
+            "/flashcards/{id}",
+            get(routes::get_flashcard)
+                .put(routes::update_flashcard)
+                .delete(routes::delete_flashcard),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

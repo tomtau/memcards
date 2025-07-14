@@ -1,22 +1,33 @@
 mod deck;
+mod flashcard;
 
 pub use deck::*;
+pub use flashcard::*;
 
 use askama::Template;
 use axum::{
     Extension,
-    extract::Query,
     http::StatusCode,
     response::{Html, IntoResponse, Response},
 };
-use serde::Deserialize;
-use tracing::{debug, error, info, warn};
+use tracing::{error, warn};
 
 use crate::{
-    config::AppConfig, errors::ApiError, sdk::verify_signed_user_token, templates::WebViewTemplate,
+    errors::ApiError,
+    sdk::AuthUser,
+    templates::WebViewTemplate,
 };
 
-pub(self) fn handle_render(res: askama::Result<String>) -> Result<Html<String>, ApiError> {
+ fn check_user_id(user_id: Option<String>) -> Result<String, ApiError> {
+    let user_id = user_id.ok_or(ApiError::UserNotFoundOrUnauthorized)?;
+    if user_id.is_empty() {
+        warn!("User ID is empty, returning unauthorized error");
+        return Err(ApiError::UserNotFoundOrUnauthorized);
+    }
+    Ok(user_id)
+}
+
+ fn handle_render(res: askama::Result<String>) -> Result<Html<String>, ApiError> {
     match res {
         Ok(html) => Ok(Html(html)),
         Err(e) => {
@@ -35,38 +46,11 @@ pub async fn styles() -> Result<impl IntoResponse, ApiError> {
     Ok(response)
 }
 
-#[derive(Deserialize)]
-pub struct WebViewQuery {
-    pub aos_signed_user_token: Option<String>,
-}
-
 pub async fn webview_handler(
-    Query(query): Query<WebViewQuery>,
-    Extension(config): Extension<AppConfig>,
+    Extension(AuthUser(user_id)): Extension<AuthUser>,
 ) -> impl IntoResponse {
-    let (user_id, is_authenticated, auth_token) = if let Some(token) = query.aos_signed_user_token {
-        match verify_signed_user_token(&token, &config.user_token_public_key) {
-            Ok(uid) => {
-                info!("User ID verified from JWT token: {}", uid);
-                (uid, true, token)
-            }
-            Err(e) => {
-                warn!("JWT token verification failed: {}", e);
-                ("".to_string(), false, "".to_string())
-            }
-        }
-    } else {
-        debug!("No JWT token provided");
-        ("".to_string(), false, "".to_string())
-    };
-    debug!(
-        "User ID: {}, Authenticated: {}, Token: {}",
-        user_id, is_authenticated, auth_token
-    );
-
     let template = WebViewTemplate {
-        is_authenticated,
-        auth_token,
+        is_authenticated: user_id.is_some_and(|x| !x.is_empty()),
     };
 
     handle_render(template.render())
