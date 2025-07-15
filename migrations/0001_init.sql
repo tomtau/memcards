@@ -5,27 +5,26 @@ CREATE TABLE IF NOT EXISTS deck (
     UNIQUE (name, user_id)
 );
 
+CREATE TYPE card_rating AS ENUM ('easy', 'good', 'difficult', 'again');
+
 CREATE TABLE IF NOT EXISTS flashcard (
 	id SERIAL PRIMARY KEY,
     deck_id INTEGER NOT NULL,
 	front TEXT NOT NULL,
 	back TEXT NOT NULL,
+    last_rating card_rating,
+    last_reviewed TIMESTAMP,
+    last_scheduled TIMESTAMP,
+    last_stability REAL,
+    last_difficulty REAL,
     UNIQUE (front, deck_id),
 	FOREIGN KEY (deck_id) REFERENCES deck(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS review (
-    id SERIAL PRIMARY KEY,
-    reviewed TIMESTAMP NOT NULL,
-    scheduled TIMESTAMP NOT NULL,
-    rating TEXT NOT NULL,
-    stability REAL NOT NULL,
-    difficulty REAL NOT NULL,
-    flashcard_id INTEGER NOT NULL,
-    FOREIGN KEY (flashcard_id) REFERENCES flashcard(id) ON DELETE CASCADE
-);
+CREATE INDEX IF NOT EXISTS idx_flashcard_scheduled ON flashcard(last_scheduled);
 
 CREATE TABLE IF NOT EXISTS settings (
     user_id TEXT PRIMARY KEY,
-    cards_per_day INTEGER NOT NULL DEFAULT 20
+    max_cards_per_session INTEGER NOT NULL DEFAULT 20,
+    desired_retention REAL NOT NULL DEFAULT 0.75
 );

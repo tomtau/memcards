@@ -12,13 +12,9 @@ use axum::{
 };
 use tracing::{error, warn};
 
-use crate::{
-    errors::ApiError,
-    sdk::AuthUser,
-    templates::WebViewTemplate,
-};
+use crate::{errors::ApiError, sdk::AuthUser, templates::WebViewTemplate};
 
- fn check_user_id(user_id: Option<String>) -> Result<String, ApiError> {
+fn check_user_id(user_id: Option<String>) -> Result<String, ApiError> {
     let user_id = user_id.ok_or(ApiError::UserNotFoundOrUnauthorized)?;
     if user_id.is_empty() {
         warn!("User ID is empty, returning unauthorized error");
@@ -27,7 +23,7 @@ use crate::{
     Ok(user_id)
 }
 
- fn handle_render(res: askama::Result<String>) -> Result<Html<String>, ApiError> {
+fn handle_render(res: askama::Result<String>) -> Result<Html<String>, ApiError> {
     match res {
         Ok(html) => Ok(Html(html)),
         Err(e) => {

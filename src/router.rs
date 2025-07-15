@@ -11,22 +11,20 @@ use crate::{
     config::AppConfig,
     routes,
     sdk::{
-        SessionHandler, app_session::AppSession, auth_middleware, health_handler, settings_handler,
+        app_session::AppSession, auth_middleware, health_handler, settings_handler,
         tool_get_handler, tool_handler, webhook_handler,
     },
 };
 
 pub struct AppState {
-    pub db: PgPool,
+    pub db: Arc<PgPool>,
     pub active_sessions: Mutex<HashMap<String, AppSession>>,
-    pub session_handler: SessionHandler,
 }
 
 pub fn init_router(db: PgPool, config: AppConfig) -> Router {
     let state = Arc::new(AppState {
-        db,
+        db: Arc::new(db),
         active_sessions: Mutex::new(HashMap::new()),
-        session_handler: SessionHandler,
     });
     // Create webhook routes that bypass authentication
     let webhook_routes = Router::new()

@@ -8,6 +8,7 @@ pub(crate) mod models;
 mod router;
 mod routes;
 pub(crate) mod sdk;
+pub(crate) mod srs;
 mod templates;
 
 #[shuttle_runtime::main]

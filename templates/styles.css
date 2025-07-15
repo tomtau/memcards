@@ -528,7 +528,7 @@ td {
     justify-content: center;
 }
 
-.review-count,
+.last-scheduled,
 .last-reviewed,
 .last-rating,
 .never-reviewed {
@@ -538,7 +538,7 @@ td {
     font-weight: 500;
 }
 
-.review-count {
+.last-scheduled {
     background: #e3f2fd;
     color: #1976d2;
 }
@@ -592,7 +592,7 @@ td {
         justify-content: flex-start;
     }
     
-    .review-count,
+    .last-scheduled,
     .last-reviewed,
     .last-rating,
     .never-reviewed {

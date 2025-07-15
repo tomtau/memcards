@@ -29,11 +29,11 @@ pub struct FlashcardsTemplate {
 #[derive(Template)]
 #[template(path = "flashcard.html")]
 pub struct FlashcardTemplate {
-    pub flashcard: models::FlashcardWithReviews,
+    pub flashcard: models::Flashcard,
 }
 
 #[derive(Template)]
 #[template(path = "flashcard_list.html")]
 pub struct FlashcardListTemplate {
-    pub flashcards: Vec<models::FlashcardWithReviews>,
+    pub flashcards: Vec<models::Flashcard>,
 }

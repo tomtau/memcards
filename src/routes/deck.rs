@@ -24,7 +24,7 @@ pub async fn fetch_decks(
     let user_id = check_user_id(user_id)?;
     let decks = sqlx::query_as::<_, Deck>("SELECT * FROM deck WHERE user_id = $1")
         .bind(&user_id)
-        .fetch_all(&state.db)
+        .fetch_all(&*state.db)
         .await?;
 
     let template = templates::Decks { decks };
@@ -42,7 +42,7 @@ pub async fn create_deck(
     )
     .bind(form.name)
     .bind(user_id)
-    .fetch_one(&state.db)
+    .fetch_one(&*state.db)
     .await?;
 
     let template = templates::DeckNewTemplate { deck };
@@ -58,7 +58,7 @@ pub async fn delete_deck(
     sqlx::query("DELETE FROM deck WHERE id = $1 AND user_id = $2")
         .bind(id)
         .bind(user_id)
-        .execute(&state.db)
+        .execute(&*state.db)
         .await?;
 
     Ok(StatusCode::OK)
@@ -77,7 +77,7 @@ pub async fn update_deck(
     .bind(form.name)
     .bind(id)
     .bind(user_id)
-    .fetch_one(&state.db)
+    .fetch_one(&*state.db)
     .await?;
 
     let template = templates::DeckNewTemplate { deck };

@@ -1,18 +1,11 @@
 pub(crate) mod app_session;
 mod event_manager;
 pub(crate) mod events;
-mod location_manager;
+pub(crate) mod location_manager;
 
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
-use crate::{
-    config::AppConfig,
-    router::AppState,
-    sdk::{
-        app_session::AppSession,
-        location_manager::{DisplayRequest, Layout, ViewType},
-    },
-};
+use crate::{config::AppConfig, router::AppState, sdk::app_session::AppSession};
 use anyhow::{Context, Result, bail};
 use axum::{
     Extension, Json,
@@ -22,14 +15,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_extra::extract::{SignedCookieJar, cookie};
-use chrono::Utc;
-use futures_util::SinkExt;
 use jsonwebtoken::{Algorithm, DecodingKey, TokenData, Validation, decode};
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tokio_tungstenite::tungstenite::Message;
+
 use tracing::{debug, error, info, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -51,82 +42,7 @@ pub struct ToolCall {
     pub tool_parameters: serde_json::Value,
 }
 
-pub struct SessionHandler;
-
-impl SessionHandler {
-    /// Called when a new session is created and connected
-    async fn on_session(
-        &self,
-        session: &AppSession,
-        session_id: &str,
-        user_id: &str,
-    ) -> Result<()> {
-        info!(
-            "🚀 Default session handling for session {} and user {}",
-            session_id, user_id
-        );
-
-        // Subscribe to some default streams
-        session
-            .subscribe_to_streams(vec![
-                "transcription:en-US".to_string(),
-                "button_press".to_string(),
-                "head_position".to_string(),
-            ])
-            .await
-            .map_err(|e| {
-                error!("Failed to subscribe to streams: {}", e);
-                e
-            })?;
-
-        session
-            .show_double_text("App left", "App right", None)
-            .await?;
-
-        // Set up transcription handler that echoes text back to the client
-        // We need to capture the websocket sender and session info for the handler to use
-        let sender_clone = session.websocket_sender.clone();
-        let package_name_clone = session.package_name.clone();
-
-        session.events().on_transcription(move |transcription| {
-            info!("🎤 Received transcription: {}", transcription.text);
-
-            // Send the transcription text back to the client using display_event
-            let text = transcription.text.clone();
-            let sender = sender_clone.clone();
-            let package_name = package_name_clone.clone();
-
-            tokio::spawn(async move {
-                if let Some(sender_arc) = sender {
-                    // Create DisplayRequest matching the Rust DisplayRequest structure
-                    let display_request = DisplayRequest {
-                        r#type: "display_event".to_string(),
-                        package_name,
-                        session_id: "".to_string(), // Empty like TypeScript version
-                        view: ViewType::Main,
-                        layout: Layout::TextWall { text: text.clone() },
-                        duration_ms: None,
-                        timestamp: Utc::now().to_rfc3339(),
-                    };
-
-                    if let Ok(display_json) = serde_json::to_string(&display_request) {
-                        debug!("📺 Echoing transcription: {}", display_json);
-                        let websocket_msg = Message::Text(display_json.into());
-
-                        let mut sender_guard = sender_arc.lock().await;
-                        if let Err(e) = sender_guard.send(websocket_msg).await {
-                            error!("Failed to send display_event message: {}", e);
-                        } else {
-                            info!("✅ Echoed transcription to client: {}", text);
-                        }
-                    }
-                }
-            });
-        });
-        // Default implementation - can be overridden
-        Ok(())
-    }
-
+impl AppState {
     /// Called when a session is being stopped
     async fn on_stop(&self, session_id: &str, user_id: &str, reason: &str) -> Result<()> {
         info!(
@@ -433,11 +349,7 @@ pub async fn webhook_handler(
                         info!("✅ Connected session {} for user {}", session_id, user_id);
 
                         // Call the session handler's on_session method
-                        match state
-                            .session_handler
-                            .on_session(&session, &session_id, &user_id)
-                            .await
-                        {
+                        match state.on_session(&session, &session_id, &user_id).await {
                             Ok(()) => {
                                 // Store the session after successful handling
                                 state
@@ -499,11 +411,7 @@ pub async fn webhook_handler(
                 payload.reason.clone(),
             ) {
                 // Call the session handler's on_stop method first
-                match state
-                    .session_handler
-                    .on_stop(&session_id, &user_id, &reason)
-                    .await
-                {
+                match state.on_stop(&session_id, &user_id, &reason).await {
                     Ok(()) => {
                         // Properly disconnect and remove the session
                         if let Some(mut session) =
@@ -568,7 +476,7 @@ pub(crate) async fn tool_handler(
     );
 
     // Call the session handler's tool call method
-    match state.session_handler.on_tool_call(&tool_call).await {
+    match state.on_tool_call(&tool_call).await {
         Ok(response) => Json(serde_json::json!({
             "status": "success",
             "reply": response

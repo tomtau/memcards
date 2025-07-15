@@ -7,11 +7,10 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use sqlx::Row;
 
 use crate::{
     errors::ApiError,
-    models::{Deck, Flashcard, FlashcardNew, FlashcardUpdate, FlashcardWithReviews, Review},
+    models::{Deck, Flashcard, FlashcardNew, FlashcardUpdate},
     router::AppState,
     routes::{check_user_id, handle_render},
     sdk::AuthUser,
@@ -22,78 +21,25 @@ async fn get_deck_and_cards(
     state: Arc<AppState>,
     user_id: Option<String>,
     deck_id: i32,
-) -> Result<(Deck, Vec<FlashcardWithReviews>), ApiError> {
+) -> Result<(Deck, Vec<Flashcard>), ApiError> {
     let user_id = check_user_id(user_id)?;
 
     // Get the deck info
     let deck = sqlx::query_as::<_, Deck>("SELECT * FROM deck WHERE id = $1 AND user_id = $2")
         .bind(deck_id)
         .bind(&user_id)
-        .fetch_optional(&state.db)
+        .fetch_optional(&*state.db)
         .await?;
 
     let deck = deck.ok_or(ApiError::UserNotFoundOrUnauthorized)?;
 
-    // Get all flashcards with their reviews
-    let rows = sqlx::query(
-        r#"
-        SELECT 
-            f.id as flashcard_id,
-            f.deck_id,
-            f.front,
-            f.back,
-            r.id as review_id,
-            r.reviewed,
-            r.scheduled,
-            r.rating,
-            r.stability,
-            r.difficulty,
-            r.flashcard_id as review_flashcard_id
-        FROM flashcard f
-        LEFT JOIN review r ON f.id = r.flashcard_id
-        WHERE f.deck_id = $1
-        ORDER BY f.id, r.reviewed DESC
-        "#,
+    // Get all flashcards for the deck
+    let flashcards = sqlx::query_as::<_, Flashcard>(
+        "SELECT * FROM flashcard WHERE deck_id = $1 ORDER BY last_reviewed DESC, id",
     )
     .bind(deck_id)
-    .fetch_all(&state.db)
+    .fetch_all(&*state.db)
     .await?;
-
-    // Group reviews by flashcard
-    let mut flashcards_map: std::collections::HashMap<i32, FlashcardWithReviews> =
-        std::collections::HashMap::new();
-
-    for row in rows {
-        let flashcard_id: i32 = row.get("flashcard_id");
-
-        let flashcard =
-            flashcards_map
-                .entry(flashcard_id)
-                .or_insert_with(|| FlashcardWithReviews {
-                    id: flashcard_id,
-                    deck_id: row.get("deck_id"),
-                    front: row.get("front"),
-                    back: row.get("back"),
-                    reviews: Vec::new(),
-                });
-
-        // Add review if it exists
-        if let Some(review_id) = row.get::<Option<i32>, _>("review_id") {
-            let review = Review {
-                id: review_id,
-                reviewed: row.get("reviewed"),
-                scheduled: row.get("scheduled"),
-                rating: row.get("rating"),
-                stability: row.get("stability"),
-                difficulty: row.get("difficulty"),
-                flashcard_id: row.get("review_flashcard_id"),
-            };
-            flashcard.reviews.push(review);
-        }
-    }
-
-    let flashcards: Vec<FlashcardWithReviews> = flashcards_map.into_values().collect();
-
     Ok((deck, flashcards))
 }
 
@@ -134,7 +80,7 @@ pub async fn create_flashcard(
     let deck_exists = sqlx::query("SELECT 1 FROM deck WHERE id = $1 AND user_id = $2")
         .bind(form.deck_id)
         .bind(&user_id)
-        .fetch_optional(&state.db)
+        .fetch_optional(&*state.db)
         .await?;
 
     if deck_exists.is_none() {
@@ -142,26 +88,15 @@ pub async fn create_flashcard(
     }
 
     let flashcard = sqlx::query_as::<_, Flashcard>(
-        "INSERT INTO flashcard (deck_id, front, back) VALUES ($1, $2, $3) RETURNING id, deck_id, front, back",
+        "INSERT INTO flashcard (deck_id, front, back) VALUES ($1, $2, $3) RETURNING *",
     )
     .bind(form.deck_id)
     .bind(form.front)
     .bind(form.back)
-    .fetch_one(&state.db)
+    .fetch_one(&*state.db)
     .await?;
 
-    // Convert to FlashcardWithReviews for template
-    let flashcard_with_reviews = FlashcardWithReviews {
-        id: flashcard.id,
-        deck_id: flashcard.deck_id,
-        front: flashcard.front,
-        back: flashcard.back,
-        reviews: Vec::new(),
-    };
-
-    let template = FlashcardTemplate {
-        flashcard: flashcard_with_reviews,
-    };
+    let template = FlashcardTemplate { flashcard };
     handle_render(template.render())
 }
 
@@ -182,29 +117,19 @@ pub async fn update_flashcard(
         WHERE id = $3 AND deck_id IN (
             SELECT id FROM deck WHERE user_id = $4
         )
-        RETURNING id, deck_id, front, back
+        RETURNING *
         "#,
     )
     .bind(form.front)
     .bind(form.back)
     .bind(id)
     .bind(user_id)
-    .fetch_optional(&state.db)
+    .fetch_optional(&*state.db)
     .await?;
 
     match flashcard {
-        Some(card) => {
-            let flashcard_with_reviews = FlashcardWithReviews {
-                id: card.id,
-                deck_id: card.deck_id,
-                front: card.front,
-                back: card.back,
-                reviews: Vec::new(),
-            };
-
-            let template = FlashcardTemplate {
-                flashcard: flashcard_with_reviews,
-            };
+        Some(flashcard) => {
+            let template = FlashcardTemplate { flashcard };
             handle_render(template.render())
         }
         None => Err(ApiError::UserNotFoundOrUnauthorized),
@@ -229,7 +154,7 @@ pub async fn delete_flashcard(
     )
     .bind(id)
     .bind(user_id)
-    .execute(&state.db)
+    .execute(&*state.db)
     .await?;
 
     if result.rows_affected() == 0 {
@@ -248,71 +173,22 @@ pub async fn get_flashcard(
     let user_id = check_user_id(user_id)?;
 
     // Get flashcard with reviews
-    let rows = sqlx::query(
+    let flashcard = sqlx::query_as::<_, Flashcard>(
         r#"
         SELECT 
-            f.id as flashcard_id,
-            f.deck_id,
-            f.front,
-            f.back,
-            r.id as review_id,
-            r.reviewed,
-            r.scheduled,
-            r.rating,
-            r.stability,
-            r.difficulty,
-            r.flashcard_id as review_flashcard_id
+            *
         FROM flashcard f
-        LEFT JOIN review r ON f.id = r.flashcard_id
         WHERE f.id = $1 AND f.deck_id IN (
             SELECT id FROM deck WHERE user_id = $2
         )
-        ORDER BY r.reviewed DESC
+        ORDER BY r.reviewed DESC, LIMIT 1
         "#,
     )
     .bind(id)
     .bind(&user_id)
-    .fetch_all(&state.db)
+    .fetch_one(&*state.db)
     .await?;
 
-    if rows.is_empty() {
-        return Err(ApiError::UserNotFoundOrUnauthorized);
-    }
-
-    let first_row = &rows[0];
-    let mut flashcard = FlashcardWithReviews {
-        id: first_row.get("flashcard_id"),
-        deck_id: first_row.get("deck_id"),
-        front: first_row.get("front"),
-        back: first_row.get("back"),
-        reviews: Vec::new(),
-    };
-
-    for row in rows {
-        if let Some(review_id) = row.get::<Option<i32>, _>("review_id") {
-            let review = Review {
-                id: review_id,
-                reviewed: row.get("reviewed"),
-                scheduled: row.get("scheduled"),
-                rating: row.get("rating"),
-                stability: row.get("stability"),
-                difficulty: row.get("difficulty"),
-                flashcard_id: row.get("review_flashcard_id"),
-            };
-            flashcard.reviews.push(review);
-        }
-    }
-
-    let flashcard_with_reviews = FlashcardWithReviews {
-        id: flashcard.id,
-        deck_id: flashcard.deck_id,
-        front: flashcard.front,
-        back: flashcard.back,
-        reviews: Vec::new(),
-    };
-
-    let template = FlashcardTemplate {
-        flashcard: flashcard_with_reviews,
-    };
+    let template = FlashcardTemplate { flashcard };
     handle_render(template.render())
 }
