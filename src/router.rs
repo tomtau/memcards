@@ -1,11 +1,11 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     Extension, Router, middleware,
     routing::{delete, get, post},
 };
+use dashmap::DashMap;
 use sqlx::PgPool;
-use tokio::sync::Mutex;
 
 use crate::{
     config::AppConfig,
@@ -18,13 +18,13 @@ use crate::{
 
 pub struct AppState {
     pub db: Arc<PgPool>,
-    pub active_sessions: Mutex<HashMap<String, AppSession>>,
+    pub active_sessions: DashMap<String, AppSession>,
 }
 
 pub fn init_router(db: PgPool, config: AppConfig) -> Router {
     let state = Arc::new(AppState {
         db: Arc::new(db),
-        active_sessions: Mutex::new(HashMap::new()),
+        active_sessions: DashMap::new(),
     });
     // Create webhook routes that bypass authentication
     let webhook_routes = Router::new()

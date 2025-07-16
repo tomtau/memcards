@@ -22,9 +22,3 @@ CREATE TABLE IF NOT EXISTS flashcard (
 );
 
 CREATE INDEX IF NOT EXISTS idx_flashcard_scheduled ON flashcard(last_scheduled);
-
-CREATE TABLE IF NOT EXISTS settings (
-    user_id TEXT PRIMARY KEY,
-    max_cards_per_session INTEGER NOT NULL DEFAULT 20,
-    desired_retention REAL NOT NULL DEFAULT 0.75
-);

@@ -24,6 +24,11 @@ async fn main(
     let cloud_api_url = secrets
         .get("CLOUD_API_URL")
         .unwrap_or_else(|| "https://prod.augmentos.cloud".to_string());
+    let cloud_domain = cloud_api_url
+        .strip_prefix("https://")
+        .or(cloud_api_url.strip_prefix("http://"))
+        .unwrap_or(&cloud_api_url)
+        .to_string();
     let default_user_token_public_key = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Yt2RtNOdeKQxWMY0c84\nADpY1Jy58YWZhaEgP2A5tBwFUKgy/TH9gQLWZjQ3dQ/6XXO8qq0kluoYFqM7ZDRF\nzJ0E4Yi0WQncioLRcCx4q8pDmqY9vPKgv6PruJdFWca0l0s3gZ3BqSeWum/C23xK\nFPHPwi8gvRdc6ALrkcHeciM+7NykU8c0EY8PSitNL+Tchti95kGu+j6APr5vNewi\nzRpQGOdqaLWe+ahHmtj6KtUZjm8o6lan4f/o08C6litizguZXuw2Nn/Kd9fFI1xF\nIVNJYMy9jgGaOi71+LpGw+vIpwAawp/7IvULDppvY3DdX5nt05P1+jvVJXPxMKzD\nTQIDAQAB\n-----END PUBLIC KEY-----".to_string();
     let package_name = secrets
         .get("PACKAGE_NAME")
@@ -38,6 +43,7 @@ async fn main(
             .get("USER_TOKEN_PUBLIC_KEY")
             .unwrap_or(default_user_token_public_key),
         cloud_api_url,
+        cloud_domain,
     };
 
     let router = router::init_router(pool, config);

@@ -13,8 +13,8 @@
     <div class="flashcard-meta">
         <div class="review-info">
             {% if flashcard.last_rating.is_some() %}
-                <span class="last-scheduled">Next: {{ flashcard.last_scheduled.as_ref().unwrap().format("%Y-%m-%d %H:%M") }}</span>
-                <span class="last-reviewed">Last: {{ flashcard.last_reviewed.as_ref().unwrap().format("%Y-%m-%d %H:%M") }}</span>
+                <span class="last-scheduled">Next: <span x-text="convertToLocalDate('{{ flashcard.last_scheduled.as_ref().unwrap() }}')"></span></span>
+                <span class="last-reviewed">Last: <span x-text="convertToLocalDate('{{ flashcard.last_reviewed.as_ref().unwrap() }}')"></span></span>
                 <span class="last-rating">Rating: {{ flashcard.last_rating.as_ref().unwrap() }}</span>
             {% else %}
                 <span class="never-reviewed">Never reviewed</span>

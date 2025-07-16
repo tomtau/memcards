@@ -1,8 +1,5 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex as StdMutex},
-};
-
+use dashmap::{DashMap, DashSet};
+use std::sync::Arc;
 use tracing::error;
 
 use crate::sdk::events::{
@@ -16,9 +13,9 @@ pub type SystemEventHandler = Box<dyn Fn(&SystemEvent) + Send + Sync>;
 
 /// Event Manager for handling WebSocket events and user subscriptions
 pub struct EventManager {
-    pub stream_handlers: Arc<StdMutex<HashMap<StreamType, Vec<EventHandler>>>>,
-    pub system_handlers: Arc<StdMutex<HashMap<String, Vec<SystemEventHandler>>>>,
-    pub active_subscriptions: Arc<StdMutex<HashSet<StreamType>>>,
+    pub stream_handlers: Arc<DashMap<StreamType, Vec<EventHandler>>>,
+    pub system_handlers: Arc<DashMap<String, Vec<SystemEventHandler>>>,
+    pub active_subscriptions: Arc<DashSet<StreamType>>,
 }
 
 impl std::fmt::Debug for EventManager {
@@ -32,9 +29,9 @@ impl std::fmt::Debug for EventManager {
 impl EventManager {
     pub fn new() -> Self {
         Self {
-            stream_handlers: Arc::new(StdMutex::new(HashMap::new())),
-            system_handlers: Arc::new(StdMutex::new(HashMap::new())),
-            active_subscriptions: Arc::new(StdMutex::new(HashSet::new())),
+            stream_handlers: Arc::new(DashMap::new()),
+            system_handlers: Arc::new(DashMap::new()),
+            active_subscriptions: Arc::new(DashSet::new()),
         }
     }
 
@@ -43,17 +40,13 @@ impl EventManager {
     where
         F: Fn(&EventData) + Send + Sync + 'static,
     {
-        let mut handlers = self.stream_handlers.lock().expect("Poisoned lock");
-        handlers
+        self.stream_handlers
             .entry(stream_type.clone())
             .or_default()
             .push(Box::new(handler));
 
         // Add to active subscriptions
-        self.active_subscriptions
-            .lock()
-            .expect("Poisoned lock")
-            .insert(stream_type);
+        self.active_subscriptions.insert(stream_type);
     }
 
     /// Add a handler for system events
@@ -61,8 +54,7 @@ impl EventManager {
     where
         F: Fn(&SystemEvent) + Send + Sync + 'static,
     {
-        let mut handlers = self.system_handlers.lock().expect("Poisoned lock");
-        handlers
+        self.system_handlers
             .entry(event_type.to_string())
             .or_default()
             .push(Box::new(handler));
@@ -130,16 +122,14 @@ impl EventManager {
 
     /// Emit a stream event to all registered handlers
     pub fn emit_stream_event(&self, stream_type: &StreamType, data: &EventData) {
-        if let Ok(handlers) = self.stream_handlers.lock() {
-            if let Some(stream_handlers) = handlers.get(stream_type) {
-                for handler in stream_handlers {
-                    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        handler(data);
-                    })) {
-                        Ok(()) => {}
-                        Err(_) => {
-                            error!("🚨 Handler panicked for stream type: {:?}", stream_type);
-                        }
+        if let Some(stream_handlers) = self.stream_handlers.get(stream_type) {
+            for handler in stream_handlers.iter() {
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    handler(data);
+                })) {
+                    Ok(()) => {}
+                    Err(_) => {
+                        error!("🚨 Handler panicked for stream type: {:?}", stream_type);
                     }
                 }
             }
@@ -148,16 +138,14 @@ impl EventManager {
 
     /// Emit a system event to all registered handlers
     pub fn emit_system_event(&self, event_type: &str, event: &SystemEvent) {
-        if let Ok(handlers) = self.system_handlers.lock() {
-            if let Some(system_handlers) = handlers.get(event_type) {
-                for handler in system_handlers {
-                    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        handler(event);
-                    })) {
-                        Ok(()) => {}
-                        Err(_) => {
-                            error!("🚨 System event handler panicked for event: {}", event_type);
-                        }
+        if let Some(system_handlers) = self.system_handlers.get(event_type) {
+            for handler in system_handlers.iter() {
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    handler(event);
+                })) {
+                    Ok(()) => {}
+                    Err(_) => {
+                        error!("🚨 System event handler panicked for event: {}", event_type);
                     }
                 }
             }
@@ -166,13 +154,12 @@ impl EventManager {
 
     /// Get the list of currently active stream subscriptions
     pub fn get_active_subscriptions(&self) -> Vec<String> {
-        if let Ok(subscriptions) = self.active_subscriptions.lock() {
-            subscriptions
-                .iter()
-                .map(|s| format!("{s:?}").to_lowercase())
-                .collect()
-        } else {
-            Vec::new()
-        }
+        self.active_subscriptions
+            .iter()
+            .map(|s| {
+                let s = s.to_owned();
+                format!("{s:?}").to_lowercase()
+            })
+            .collect()
     }
 }

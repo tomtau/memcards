@@ -16,7 +16,7 @@ use axum::{
 };
 use axum_extra::extract::{SignedCookieJar, cookie};
 use jsonwebtoken::{Algorithm, DecodingKey, TokenData, Validation, decode};
-use reqwest::Client;
+use reqwest::{Client, Url};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -32,6 +32,8 @@ pub struct WebhookRequest {
     pub user_id: Option<String>,
     #[serde(rename = "augmentOSWebsocketUrl")]
     pub augmentos_websocket_url: Option<String>,
+    #[serde(rename = "mentraOSWebsocketUrl")]
+    pub mentraos_websocket_url: Option<String>,
     pub timestamp: Option<String>,
     pub reason: Option<String>,
 }
@@ -333,8 +335,36 @@ pub async fn webhook_handler(
             if let (Some(session_id), Some(user_id), Some(ws_url)) = (
                 payload.session_id.clone(),
                 payload.user_id.clone(),
-                payload.augmentos_websocket_url.clone(),
+                payload
+                    .augmentos_websocket_url
+                    .clone()
+                    .or(payload.mentraos_websocket_url),
             ) {
+                match Url::parse(&ws_url).context("Invalid WebSocket URL") {
+                    Ok(parsed_url) => match parsed_url.domain() {
+                        Some(domain) if domain == config.cloud_domain => {
+                            info!("WebSocket URL is valid: {}", domain)
+                        }
+                        _ => {
+                            error!("WebSocket URL has no valid domain");
+                            return (
+                                StatusCode::BAD_REQUEST,
+                                Json(
+                                    serde_json::json!({"status": "error", "message": "WebSocket URL has no valid domain"}),
+                                ),
+                            );
+                        }
+                    },
+                    Err(e) => {
+                        error!("Invalid WebSocket URL: {}", e);
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            Json(
+                                serde_json::json!({"status": "error", "message": format!("Invalid WebSocket URL: {}", e)}),
+                            ),
+                        );
+                    }
+                };
                 let mut session = AppSession::new(
                     session_id.clone(),
                     user_id.clone(),
@@ -352,11 +382,7 @@ pub async fn webhook_handler(
                         match state.on_session(&session, &session_id, &user_id).await {
                             Ok(()) => {
                                 // Store the session after successful handling
-                                state
-                                    .active_sessions
-                                    .lock()
-                                    .await
-                                    .insert(session_id.clone(), session);
+                                state.active_sessions.insert(session_id.clone(), session);
                                 info!(
                                     "✅ Session {} fully initialized for user {}",
                                     session_id, user_id
@@ -414,9 +440,7 @@ pub async fn webhook_handler(
                 match state.on_stop(&session_id, &user_id, &reason).await {
                     Ok(()) => {
                         // Properly disconnect and remove the session
-                        if let Some(mut session) =
-                            state.active_sessions.lock().await.remove(&session_id)
-                        {
+                        if let Some((_, mut session)) = state.active_sessions.remove(&session_id) {
                             session.disconnect();
                             info!(
                                 "🛑 Stopped and disconnected session {} for user {}: {}",
@@ -436,9 +460,7 @@ pub async fn webhook_handler(
                             session_id, e
                         );
                         // Still try to clean up the session even if handler failed
-                        if let Some(mut session) =
-                            state.active_sessions.lock().await.remove(&session_id)
-                        {
+                        if let Some((_, mut session)) = state.active_sessions.remove(&session_id) {
                             session.disconnect();
                         }
                         (
@@ -496,21 +518,63 @@ pub(crate) async fn tool_get_handler() -> impl IntoResponse {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct SettingsPayload {
     user_id_for_settings: String,
     settings: Vec<serde_json::Value>,
 }
 pub(crate) async fn settings_handler(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(payload): Json<SettingsPayload>,
 ) -> impl IntoResponse {
-    // For demo: just logs, normally would update sessions
-    info!(
-        "Settings update for user {}: {}",
-        payload.user_id_for_settings,
-        payload.settings.len()
-    );
-    Json(serde_json::json!({"status": "success", "sessionsUpdated": 0}))
+    let mut new_max_cards_per_session = None;
+    let mut new_desired_retention = None;
+    for setting in &payload.settings {
+        if let Some(key) = setting.get("key").and_then(|k| k.as_str()) {
+            if key == "max_cards_per_session" {
+                new_max_cards_per_session = setting
+                    .get("value")
+                    .and_then(|v| v.as_u64())
+                    .filter(|x| *x > 0 && *x <= 100);
+            } else if key == "desired_retention" {
+                new_desired_retention = setting
+                    .get("value")
+                    .and_then(|v| v.as_u64())
+                    .filter(|x| *x > 0 && *x <= 100);
+            }
+        }
+    }
+    let mut updated = 0;
+    if new_desired_retention.is_some() || new_max_cards_per_session.is_some() {
+        info!(
+            "[settings] Settings updated for user {}: max_cards_per_session={:?}, desired_retention={:?}",
+            payload.user_id_for_settings, new_max_cards_per_session, new_desired_retention
+        );
+
+        for session in state.active_sessions.iter() {
+            if session.user_id == payload.user_id_for_settings {
+                info!(
+                    "[settings] Updating session {} for user {} with new settings",
+                    session.session_id, payload.user_id_for_settings
+                );
+                if let Some(max_cards) = new_max_cards_per_session {
+                    session
+                        .user_settings
+                        .set_max_cards_per_session(max_cards as u8);
+                }
+                if let Some(retention) = new_desired_retention {
+                    session.user_settings.set_desired_retention(retention as u8);
+                }
+                updated += 1;
+            }
+        }
+    } else {
+        warn!(
+            "[settings] No valid settings found in payload for user {}",
+            payload.user_id_for_settings
+        );
+    }
+    Json(serde_json::json!({"status": "success", "sessionsUpdated": updated}))
 }
 
 pub(crate) async fn health_handler(
@@ -520,6 +584,6 @@ pub(crate) async fn health_handler(
     Json(serde_json::json!({
         "status": "healthy",
         "app": config.package_name,
-        "activeSessions": state.active_sessions.lock().await.len()
+        "activeSessions": state.active_sessions.len()
     }))
 }

@@ -1,18 +1,25 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU8, Ordering},
+    },
+};
 
 use anyhow::bail;
 use chrono::{TimeDelta, Utc};
+use crossbeam_queue::ArrayQueue;
 use fsrs::{DEFAULT_PARAMETERS, FSRS, MemoryState};
 use futures_util::{SinkExt, stream::SplitSink};
 use sqlx::{PgPool, Row};
-use tokio::{
-    net::TcpStream,
-    sync::{Mutex, MutexGuard},
-};
+use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use tracing::{debug, error, info};
 
-use crate::sdk::location_manager::{DisplayRequest, Layout, ViewType};
+use crate::sdk::{
+    events::SystemEvent,
+    location_manager::{DisplayRequest, Layout, ViewType},
+};
 use crate::{
     models::{CardRating, Flashcard, FlashcardReviewNew},
     router::AppState,
@@ -20,8 +27,55 @@ use crate::{
 };
 use anyhow::Result;
 
-pub fn new_review(card: &Flashcard, rating: CardRating) -> Result<FlashcardReviewNew> {
-    let next_states = schedule_states(card)?;
+#[derive(Debug)]
+pub struct UserSettings {
+    max_cards_per_session: AtomicU8,
+    desired_retention: AtomicU8,
+}
+
+impl UserSettings {
+    pub fn new(max_cards_per_session: u8, desired_retention: u8) -> Self {
+        Self {
+            max_cards_per_session: AtomicU8::new(max_cards_per_session),
+            desired_retention: AtomicU8::new(desired_retention),
+        }
+    }
+
+    pub fn max_cards_per_session(&self) -> u8 {
+        self.max_cards_per_session
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn desired_retention(&self) -> u8 {
+        self.desired_retention
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn set_max_cards_per_session(&self, value: u8) {
+        if value <= 100 && value > 0 {
+            self.max_cards_per_session
+                .store(value, std::sync::atomic::Ordering::Relaxed);
+        } else {
+            error!("Invalid max cards per session: {}", value);
+        }
+    }
+
+    pub fn set_desired_retention(&self, value: u8) {
+        if value <= 100 && value > 0 {
+            self.desired_retention
+                .store(value, std::sync::atomic::Ordering::Relaxed);
+        } else {
+            error!("Invalid desired retention: {}", value);
+        }
+    }
+}
+
+pub fn new_review(
+    card: &Flashcard,
+    rating: CardRating,
+    desired_retention: f32,
+) -> Result<FlashcardReviewNew> {
+    let next_states = schedule_states(card, desired_retention)?;
     let next_state = match rating {
         CardRating::Easy => next_states.easy,
         CardRating::Good => next_states.good,
@@ -42,9 +96,8 @@ pub fn new_review(card: &Flashcard, rating: CardRating) -> Result<FlashcardRevie
     })
 }
 
-fn schedule_states(card: &Flashcard) -> anyhow::Result<fsrs::NextStates> {
+fn schedule_states(card: &Flashcard, desired_retention: f32) -> anyhow::Result<fsrs::NextStates> {
     let fsrs = FSRS::new(Some(&DEFAULT_PARAMETERS))?;
-    let desired_retention = 0.75; // TODO: user settings
 
     let next_states = if card.last_reviewed.is_none() {
         // If no reviews, initialize with default memory state
@@ -63,50 +116,50 @@ fn schedule_states(card: &Flashcard) -> anyhow::Result<fsrs::NextStates> {
 }
 
 pub struct SessionState {
-    cards: Vec<Flashcard>,
+    cards: ArrayQueue<Flashcard>,
     deck_names: HashMap<i32, String>,
-    started: bool,
+    started: AtomicBool,
     app_state: Arc<PgPool>,
     user_id: String,
+    last_card: Arc<Mutex<Option<Flashcard>>>,
+    user_settings: Arc<UserSettings>,
+    sender: Option<Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
+    package_name: String,
 }
 
-async fn next_card_or_finish<'s>(
-    text: String,
-    session_state: MutexGuard<'s, SessionState>,
-    package_name: String,
-    sender: Option<Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
-) {
-    if let Some(sender_arc) = sender {
-        let display_request = if session_state.cards.is_empty() {
+async fn next_card_or_finish(text: String, session_state: &SessionState) {
+    if let Some(sender_arc) = &session_state.sender {
+        let display_request = if let Some(last_card) = session_state.cards.pop() {
+            let deck_name = session_state
+                .deck_names
+                .get(&last_card.deck_id)
+                .cloned()
+                .unwrap_or_default();
+            let top_text = last_card.front.clone();
+            session_state.last_card.lock().await.replace(last_card);
+            DisplayRequest {
+                r#type: "display_event".to_string(),
+                package_name: session_state.package_name.clone(),
+                session_id: "".to_string(), // Empty like TypeScript version
+                view: ViewType::Main,
+                layout: Layout::DoubleTextWall {
+                    top_text,
+                    bottom_text: format!("{deck_name} ({} left)", session_state.cards.len()),
+                },
+                duration_ms: None,
+                timestamp: Utc::now().to_rfc3339(),
+            }
+        } else {
             info!("All cards reviewed");
             DisplayRequest {
                 r#type: "display_event".to_string(),
-                package_name,
+                package_name: session_state.package_name.clone(),
                 session_id: "".to_string(), // Empty like TypeScript version
                 view: ViewType::Main,
                 layout: Layout::TextWall {
                     text:
                         "All cards reviewed! You can end the session in the Mentra app interface."
                             .to_string(),
-                },
-                duration_ms: None,
-                timestamp: Utc::now().to_rfc3339(),
-            }
-        } else {
-            let last_card = session_state.cards.last().unwrap();
-            let deck_name = session_state
-                .deck_names
-                .get(&last_card.deck_id)
-                .cloned()
-                .unwrap_or_default();
-            DisplayRequest {
-                r#type: "display_event".to_string(),
-                package_name,
-                session_id: "".to_string(), // Empty like TypeScript version
-                view: ViewType::Main,
-                layout: Layout::DoubleTextWall {
-                    top_text: last_card.front.clone(),
-                    bottom_text: format!("{deck_name} ({} left)", session_state.cards.len()),
                 },
                 duration_ms: None,
                 timestamp: Utc::now().to_rfc3339(),
@@ -130,9 +183,13 @@ async fn next_card_or_finish<'s>(
 async fn update_rating<'s>(
     card: &Flashcard,
     rating: CardRating,
-    session_state: &MutexGuard<'s, SessionState>,
+    session_state: &SessionState,
 ) -> Result<()> {
-    let update = new_review(card, rating)?;
+    let update = new_review(
+        card,
+        rating,
+        session_state.user_settings.desired_retention() as f32 / 100.0,
+    )?;
     let flashcard = sqlx::query_as::<_, Flashcard>(
         r#"
         UPDATE flashcard 
@@ -160,54 +217,50 @@ async fn update_rating<'s>(
     Ok(())
 }
 
-async fn on_transcription(
-    text: String,
-    session_state: Arc<Mutex<SessionState>>,
-    package_name: String,
-    sender: Option<Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
-) -> Result<()> {
-    let started = session_state.lock().await.started;
+async fn on_reveal(session_state: Arc<SessionState>) {
+    if let Some(card) = session_state.last_card.lock().await.clone() {
+        info!("Revealing card: {}", card.front);
+        // Here you would send the back of the card to the client
+        if let Some(sender_arc) = &session_state.sender {
+            // Create DisplayRequest matching the Rust DisplayRequest structure
+            let display_request = DisplayRequest {
+                r#type: "display_event".to_string(),
+                package_name: session_state.package_name.clone(),
+                session_id: "".to_string(), // Empty like TypeScript version
+                view: ViewType::Main,
+                layout: Layout::DoubleTextWall {
+                    top_text: card.front.clone(),
+                    bottom_text: card.back.clone(),
+                },
+                duration_ms: None,
+                timestamp: Utc::now().to_rfc3339(),
+            };
+
+            if let Ok(display_json) = serde_json::to_string(&display_request) {
+                debug!("📺 Revealing card: {}", display_json);
+                let websocket_msg = Message::Text(display_json.into());
+
+                let mut sender_guard = sender_arc.lock().await;
+                if let Err(e) = sender_guard.send(websocket_msg).await {
+                    error!("Failed to send display_event message: {}", e);
+                } else {
+                    info!("✅ Revealed card: {}", card.front);
+                }
+            }
+        }
+    }
+}
+
+async fn on_transcription(text: String, session_state: Arc<SessionState>) -> Result<()> {
+    let started = session_state.started.load(Ordering::Relaxed);
     info!("Received transcription: {}", text);
     let text = text.trim().to_lowercase();
     if started {
         // If already started, handle the transcription
         if text.contains("reveal") {
-            let session_state = session_state.lock().await;
-
-            if let Some(card) = session_state.cards.last() {
-                info!("Revealing card: {}", card.front);
-                // Here you would send the back of the card to the client
-                if let Some(sender_arc) = sender {
-                    // Create DisplayRequest matching the Rust DisplayRequest structure
-                    let display_request = DisplayRequest {
-                        r#type: "display_event".to_string(),
-                        package_name,
-                        session_id: "".to_string(), // Empty like TypeScript version
-                        view: ViewType::Main,
-                        layout: Layout::DoubleTextWall {
-                            top_text: card.front.clone(),
-                            bottom_text: card.back.clone(),
-                        },
-                        duration_ms: None,
-                        timestamp: Utc::now().to_rfc3339(),
-                    };
-
-                    if let Ok(display_json) = serde_json::to_string(&display_request) {
-                        debug!("📺 Revealing card: {}", display_json);
-                        let websocket_msg = Message::Text(display_json.into());
-
-                        let mut sender_guard = sender_arc.lock().await;
-                        if let Err(e) = sender_guard.send(websocket_msg).await {
-                            error!("Failed to send display_event message: {}", e);
-                        } else {
-                            info!("✅ Revealed card: {}", text);
-                        }
-                    }
-                }
-            }
+            on_reveal(session_state).await;
         } else if let Ok(rating) = text.parse::<CardRating>() {
-            let mut session_state = session_state.lock().await;
-            if let Some(card) = session_state.cards.pop() {
+            if let Some(card) = session_state.last_card.lock().await.clone() {
                 info!("Rating card {} as {}", card.id, rating);
                 // Here you would handle the rating logic
                 if let Err(e) = update_rating(&card, rating, &session_state).await {
@@ -216,18 +269,45 @@ async fn on_transcription(
                     info!("Card {} rated as {}", card.id, rating);
                 }
             }
-            next_card_or_finish(text, session_state, package_name, sender).await;
+            next_card_or_finish(text, &session_state).await;
         }
     } else if text.contains("start") {
-        let mut session_state = session_state.lock().await;
-        session_state.started = true;
+        session_state.started.store(true, Ordering::Relaxed);
         info!(
             "Starting review session with {} cards",
             session_state.cards.len()
         );
-        next_card_or_finish(text, session_state, package_name, sender).await;
+        next_card_or_finish(text, &session_state).await;
     }
     Ok(())
+}
+
+fn update_user_settings(user_settings: Arc<UserSettings>, payload: &serde_json::Value) {
+    let mut new_max_cards_per_session = None;
+    let mut new_desired_retention = None;
+    if let Some(settings) = payload.as_array() {
+        for setting in settings {
+            if let Some(key) = setting.get("key").and_then(|k| k.as_str()) {
+                if key == "max_cards_per_session" {
+                    new_max_cards_per_session = setting
+                        .get("value")
+                        .and_then(|v| v.as_u64())
+                        .filter(|x| *x > 0 && *x <= 100);
+                } else if key == "desired_retention" {
+                    new_desired_retention = setting
+                        .get("value")
+                        .and_then(|v| v.as_u64())
+                        .filter(|x| *x > 0 && *x <= 100);
+                }
+            }
+        }
+    }
+    if let Some(max_cards) = new_max_cards_per_session {
+        user_settings.set_max_cards_per_session(max_cards as u8);
+    }
+    if let Some(retention) = new_desired_retention {
+        user_settings.set_desired_retention(retention as u8);
+    }
 }
 
 impl AppState {
@@ -235,7 +315,7 @@ impl AppState {
         &self,
         user_id: &str,
         limit: usize,
-    ) -> Result<(HashMap<i32, String>, Vec<Flashcard>)> {
+    ) -> Result<(HashMap<i32, String>, ArrayQueue<Flashcard>)> {
         let deck_names = sqlx::query(
             r#"
             SELECT id, name FROM deck WHERE user_id = $1
@@ -269,8 +349,12 @@ impl AppState {
         .bind(limit as i64)
         .fetch_all(&*self.db)
         .await?;
+        let cards = ArrayQueue::new(100);
+        for card in flashcards {
+            cards.force_push(card);
+        }
 
-        Ok((deck_names, flashcards))
+        Ok((deck_names, cards))
     }
 
     /// Called when a new session is created and connected
@@ -298,29 +382,64 @@ impl AppState {
                 e
             })?;
 
-        // FIXME: take limit from settings
-        let (deck_names, cards) = self.get_cards(user_id, 20).await?;
+        let (deck_names, cards) = self
+            .get_cards(
+                user_id,
+                session.user_settings.max_cards_per_session() as usize,
+            )
+            .await?;
         if cards.is_empty() {
             session
                 .show_text(
-                    "No flashcards found. Please add flashcards in the Mentra app interface.",
+                    "No flashcards scheduled for review now.\nPlease add flashcards in the Mentra app interface.",
                     None,
                 )
                 .await?;
         } else {
-            session.show_text(format!("{} cards for review. Say 'start' to begin.\nSay 'reveal' to display the back answer on each card.\nSay 'easy', 'good', 'difficult', or 'again'\nto rate your card memorization.", cards.len()), None).await?;
+            let card_count = if cards.len() == 1 {
+                "1 card".to_string()
+            } else {
+                format!("{} cards", cards.len())
+            };
+            session.show_text(format!("{card_count} for review. Say 'start' to begin.\nSay 'reveal' to display the back answer on each card.\nSay 'easy', 'good', 'difficult', or 'again'\nto rate your card memorization."), None).await?;
         }
-        // Set up transcription handler that echoes text back to the client
-        // We need to capture the websocket sender and session info for the handler to use
+
         let sender_clone = session.websocket_sender.clone();
-        let package_name_clone = session.package_name.clone();
-        let session_state = Arc::new(Mutex::new(SessionState {
+        let session_state = Arc::new(SessionState {
             cards,
             deck_names,
-            started: false,
+            started: AtomicBool::new(false),
             app_state: self.db.clone(),
             user_id: user_id.to_string(),
-        }));
+            last_card: Arc::new(Mutex::new(None)),
+            user_settings: session.user_settings.clone(),
+            sender: sender_clone,
+            package_name: session.package_name.clone(),
+        });
+        let user_settings: Arc<UserSettings> = session.user_settings.clone();
+        session.events().on_system("connected", move |event| {
+            if let SystemEvent::Connected(Some(settings)) = event {
+                update_user_settings(user_settings.clone(), settings);
+            }
+        });
+        let user_settings: Arc<UserSettings> = session.user_settings.clone();
+        session.events().on_system("settings_update", move |event| {
+            if let SystemEvent::SettingsUpdate(settings) = event {
+                update_user_settings(user_settings.clone(), settings);
+            }
+        });
+        let session_state_in = session_state.clone();
+        session.events().on_head_position(move |head_position| {
+            info!("Received head position: {:?}", head_position);
+            if head_position.position.to_lowercase().contains("up") {
+                tokio::spawn(on_reveal(session_state_in.clone()));
+            }
+        });
+        let session_state_in = session_state.clone();
+        session.events().on_button_press(move |button_press| {
+            info!("Received button press: {:?}", button_press);
+            tokio::spawn(on_reveal(session_state_in.clone()));
+        });
         session.events().on_transcription(move |transcription| {
             info!(
                 "🎤 Received transcription: {} (final: {})",
@@ -329,15 +448,11 @@ impl AppState {
 
             // Send the transcription text back to the client using display_event
             let text = transcription.text.clone();
-            let sender = sender_clone.clone();
-            let package_name = package_name_clone.clone();
-            let session_state = session_state.clone();
+            let session_state: Arc<SessionState> = session_state.clone();
             if transcription.is_final {
                 tokio::spawn(async move {
                     let session_state = session_state;
-                    if let Err(e) =
-                        on_transcription(text, session_state.clone(), package_name, sender).await
-                    {
+                    if let Err(e) = on_transcription(text, session_state.clone()).await {
                         error!("Failed to process transcription: {}", e);
                     }
                 });

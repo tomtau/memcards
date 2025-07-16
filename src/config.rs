@@ -8,4 +8,5 @@ pub struct AppConfig {
     pub cookie_secret: Key,
     pub user_token_public_key: String,
     pub cloud_api_url: String,
+    pub cloud_domain: String,
 }

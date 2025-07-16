@@ -12,14 +12,17 @@ use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
-use crate::sdk::{
-    event_manager::EventManager,
-    events::{
-        AudioChunkData, BatteryData, ButtonPressData, CalendarEventData, EventData,
-        HeadPositionData, LocationData, PhoneNotificationData, PhotoTakenData, StreamType,
-        SystemEvent, TranscriptionData, TranslationData, VadData, VpsCoordinatesData,
+use crate::{
+    sdk::{
+        event_manager::EventManager,
+        events::{
+            AudioChunkData, BatteryData, ButtonPressData, CalendarEventData, EventData,
+            HeadPositionData, LocationData, PhoneNotificationData, PhotoTakenData, StreamType,
+            SystemEvent, TranscriptionData, TranslationData, VadData, VpsCoordinatesData,
+        },
+        location_manager::{DisplayRequest, LayoutManager},
     },
-    location_manager::{DisplayRequest, LayoutManager},
+    srs::UserSettings,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -59,8 +62,8 @@ pub struct AppSession {
     pub package_name: String,
     pub api_key: SecretString,
     pub augmentos_websocket_url: Option<String>,
-    pub last_updated: u64,                       // timestamp
-    pub custom_state: Option<serde_json::Value>, // extensible
+    pub last_updated: u64, // timestamp
+    pub user_settings: Arc<UserSettings>,
     pub connected: bool,
     pub reconnect_attempts: u32,
     pub event_manager: EventManager,
@@ -97,7 +100,7 @@ impl AppSession {
             api_key,
             augmentos_websocket_url,
             last_updated: now_millis(),
-            custom_state: None,
+            user_settings: Arc::new(UserSettings::new(20, 75)),
             connected: false,
             reconnect_attempts: 0,
             event_manager,

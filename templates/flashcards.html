@@ -1,12 +1,12 @@
-{% extends "base.html" %} 
-{% block title %}{{ deck.name }} - Flashcards{% endblock %} 
+{% extends "base.html" %}
+{% block title %}{{ deck.name }} - Flashcards{% endblock %}
 {% block content %}
 <div class="flashcard-management">
     <div class="header">
         <h1>{{ deck.name }}</h1>
         <a href="/webview" class="btn btn-secondary">← Back to Decks</a>
     </div>
-    
+
     <!-- Add new flashcard form -->
     <div class="add-flashcard-section">
         <h2>Add New Flashcard</h2>
@@ -14,32 +14,16 @@
             <input type="hidden" name="deck_id" value="{{ deck.id }}">
             <div class="form-group">
                 <label for="front">Front:</label>
-                <textarea 
-                    name="front" 
-                    id="front" 
-                    placeholder="Enter the question or prompt..."
-                    required
-                    rows="3"
-                ></textarea>
+                <textarea name="front" id="front" placeholder="Enter the question or prompt..." required
+                    rows="3"></textarea>
             </div>
             <div class="form-group">
                 <label for="back">Back:</label>
-                <textarea 
-                    name="back" 
-                    id="back" 
-                    placeholder="Enter the answer or explanation..."
-                    required
-                    rows="3"
-                ></textarea>
+                <textarea name="back" id="back" placeholder="Enter the answer or explanation..." required
+                    rows="3"></textarea>
             </div>
-            <button 
-                type="button"
-                class="btn btn-primary"
-                hx-post="/decks/{{ deck.id }}/flashcards"
-                hx-include="#add-flashcard-form"
-                hx-target="#flashcards-list"
-                hx-swap="beforeend"
-            >
+            <button type="button" class="btn btn-primary" hx-post="/decks/{{ deck.id }}/flashcards"
+                hx-include="#add-flashcard-form" hx-target="#flashcards-list" hx-swap="beforeend">
                 Add Flashcard
             </button>
         </form>
@@ -48,50 +32,45 @@
     <!-- Flashcards list -->
     <div class="flashcards-section">
         <h2>Flashcards</h2>
-        <div 
-            id="flashcards-list"
-            hx-get="/decks/{{ deck.id }}/flashcards/list"
-            hx-trigger="load"
-            hx-target="this"
-            hx-swap="innerHTML"
-        >
+        <div id="flashcards-list" hx-get="/decks/{{ deck.id }}/flashcards/list" hx-trigger="load" hx-target="this"
+            hx-swap="innerHTML">
             Loading flashcards...
         </div>
     </div>
 </div>
 
 <script>
-// Clear form after successful creation
-document.body.addEventListener('htmx:afterRequest', function(event) {
-    if (event.detail.xhr.status === 200 && event.target.matches('[hx-post*="/flashcards"]')) {
-        const form = document.getElementById('add-flashcard-form');
-        const frontTextarea = form.querySelector('textarea[name="front"]');
-        const backTextarea = form.querySelector('textarea[name="back"]');
-        frontTextarea.value = '';
-        backTextarea.value = '';
-        frontTextarea.focus();
-        
-        // Check if this was the first flashcard (remove "no flashcards" message)
-        const noFlashcardsMessage = document.querySelector('.no-flashcards');
-        if (noFlashcardsMessage) {
-            noFlashcardsMessage.remove();
-        }
-        
-        // Show success message
-        Swal.fire({
-            title: 'Success!',
-            text: 'Flashcard created successfully',
-            icon: 'success',
-            timer: 2000,
-            showConfirmButton: false
-        });
-    }
-});
+    // Clear form after successful creation
+    document.body.addEventListener('htmx:afterRequest', function (event) {
+        if (event.detail.xhr.status === 200 && event.target.matches('[hx-post*="/flashcards"]')) {
+            const form = document.getElementById('add-flashcard-form');
+            const frontTextarea = form.querySelector('textarea[name="front"]');
+            const backTextarea = form.querySelector('textarea[name="back"]');
+            frontTextarea.value = '';
+            backTextarea.value = '';
+            frontTextarea.focus();
 
-function editFlashcard(id, front, back) {
-    Swal.fire({
-        title: 'Edit Flashcard',
-        html: `
+            // Check if this was the first flashcard (remove "no flashcards" message)
+            const noFlashcardsMessage = document.querySelector('.no-flashcards');
+            if (noFlashcardsMessage) {
+                noFlashcardsMessage.remove();
+            }
+
+            // Show success message
+            Swal.fire({
+                title: 'Success!',
+                text: 'Flashcard created successfully',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        }
+    });
+
+    function editFlashcard(id, front, back) {
+        Swal.fire({
+            title: 'Edit Flashcard',
+            html: `
             <div style="text-align: left;">
                 <label for="edit-front" style="display: block; margin-bottom: 8px; font-weight: bold; font-size: 1rem;">Front:</label>
                 <textarea id="edit-front" style="width: 100%; min-height: 100px; margin-bottom: 15px; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; resize: vertical;">${front}</textarea>
@@ -100,93 +79,99 @@ function editFlashcard(id, front, back) {
                 <textarea id="edit-back" style="width: 100%; min-height: 100px; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1rem; resize: vertical;">${back}</textarea>
             </div>
         `,
-        showCancelButton: true,
-        confirmButtonText: 'Save',
-        cancelButtonText: 'Cancel',
-        confirmButtonColor: '#007bff',
-        cancelButtonColor: '#6c757d',
-        customClass: {
-            popup: 'mobile-friendly-popup'
-        },
-        heightAuto: false,
-        scrollbarPadding: false,
-        width: 'auto',
-        preConfirm: () => {
-            const newFront = document.getElementById('edit-front').value.trim();
-            const newBack = document.getElementById('edit-back').value.trim();
-            
-            if (!newFront || !newBack) {
-                Swal.showValidationMessage('Both front and back are required');
-                return false;
-            }
-            
-            return { front: newFront, back: newBack };
-        }
-    }).then((result) => {
-        if (result.isConfirmed) {
-            htmx.ajax('PUT', `/flashcards/${id}`, {
-                values: result.value,
-                target: `#flashcard-${id}`,
-                swap: 'outerHTML'
-            }).then(() => {
-                Swal.fire({
-                    title: 'Success!',
-                    text: 'Flashcard updated successfully',
-                    icon: 'success',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
-            }).catch(() => {
-                Swal.fire({
-                    title: 'Error!',
-                    text: 'Failed to update flashcard',
-                    icon: 'error',
-                    confirmButtonColor: '#dc3545'
-                });
-            });
-        }
-    });
-}
+            showCancelButton: true,
+            confirmButtonText: 'Save',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#007bff',
+            cancelButtonColor: '#6c757d',
+            customClass: {
+                popup: 'mobile-friendly-popup'
+            },
+            heightAuto: false,
+            scrollbarPadding: false,
+            width: 'auto',
+            preConfirm: () => {
+                const newFront = document.getElementById('edit-front').value.trim();
+                const newBack = document.getElementById('edit-back').value.trim();
 
-function deleteFlashcard(id, front) {
-    Swal.fire({
-        title: 'Delete Flashcard',
-        text: `Are you sure you want to delete this flashcard: "${front.substring(0, 50)}${front.length > 50 ? '...' : ''}"?`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc3545',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: 'Yes, delete it!',
-        customClass: {
-            popup: 'mobile-friendly-popup'
-        },
-        heightAuto: false,
-        scrollbarPadding: false,
-        width: 'auto'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            htmx.ajax('DELETE', `/flashcards/${id}`, {
-                target: `#flashcard-${id}`,
-                swap: 'delete'
-            }).then(() => {
-                Swal.fire({
-                    title: 'Deleted!',
-                    text: 'Flashcard has been deleted',
-                    icon: 'success',
-                    timer: 2000,
-                    showConfirmButton: false
+                if (!newFront || !newBack) {
+                    Swal.showValidationMessage('Both front and back are required');
+                    return false;
+                }
+
+                return { front: newFront, back: newBack };
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                htmx.ajax('PUT', `/flashcards/${id}`, {
+                    values: result.value,
+                    target: `#flashcard-${id}`,
+                    swap: 'outerHTML'
+                }).then(() => {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Flashcard updated successfully',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                }).catch(() => {
+                    Swal.fire({
+                        title: 'Error!',
+                        text: 'Failed to update flashcard',
+                        icon: 'error',
+                        confirmButtonColor: '#dc3545'
+                    });
                 });
-            }).catch(() => {
-                Swal.fire({
-                    title: 'Error!',
-                    text: 'Failed to delete flashcard',
-                    icon: 'error',
-                    confirmButtonColor: '#dc3545'
+            }
+        });
+    }
+
+    function convertToLocalDate(date) {
+        let deserializedDate = new Date(date);
+        let currentTimeZoneOffset = deserializedDate.getTimezoneOffset() * 60_000;
+        return new Date(deserializedDate - currentTimeZoneOffset).toLocaleString();
+    }
+
+    function deleteFlashcard(id, front) {
+        Swal.fire({
+            title: 'Delete Flashcard',
+            text: `Are you sure you want to delete this flashcard: "${front.substring(0, 50)}${front.length > 50 ? '...' : ''}"?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, delete it!',
+            customClass: {
+                popup: 'mobile-friendly-popup'
+            },
+            heightAuto: false,
+            scrollbarPadding: false,
+            width: 'auto'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                htmx.ajax('DELETE', `/flashcards/${id}`, {
+                    target: `#flashcard-${id}`,
+                    swap: 'delete'
+                }).then(() => {
+                    Swal.fire({
+                        title: 'Deleted!',
+                        text: 'Flashcard has been deleted',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                }).catch(() => {
+                    Swal.fire({
+                        title: 'Error!',
+                        text: 'Failed to delete flashcard',
+                        icon: 'error',
+                        confirmButtonColor: '#dc3545'
+                    });
                 });
-            });
-        }
-    });
-}
+            }
+        });
+    }
 
 </script>
 
