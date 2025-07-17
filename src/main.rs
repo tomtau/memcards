@@ -4,6 +4,7 @@ use shuttle_runtime::SecretStore;
 use sqlx::PgPool;
 pub(crate) mod config;
 pub(crate) mod errors;
+mod import;
 pub(crate) mod models;
 mod router;
 mod routes;

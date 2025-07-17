@@ -1,3 +1,21 @@
+<div id="flashcard-stats">
+    <h3>Flashcard Statistics</h3>
+    <div class="stats-container">
+        <div class="stat-item">
+            <span class="stat-indicator new"></span>
+            <span class="stat-text"><strong>New:</strong> {{ stats.new_count }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-indicator review"></span>
+            <span class="stat-text"><strong>For Review:</strong> {{ stats.for_review_count }}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-indicator learning"></span>
+            <span class="stat-text"><strong>Learning:</strong> {{ stats.learning_count }}</span>
+        </div>
+    </div>
+</div>
+
 <div id="decks">
     <table>
         <thead>

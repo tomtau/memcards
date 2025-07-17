@@ -7,6 +7,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use sqlx::Row;
 
 use crate::{
     errors::ApiError,
@@ -27,7 +28,29 @@ pub async fn fetch_decks(
         .fetch_all(&*state.db)
         .await?;
 
-    let template = templates::Decks { decks };
+    // Calculate statistics for all flashcards across all decks
+    let stats_query = r#"
+        SELECT 
+            COUNT(CASE WHEN last_rating IS NULL THEN 1 END) as new_count,
+            COUNT(CASE WHEN last_scheduled IS NOT NULL AND last_scheduled <= NOW() THEN 1 END) as for_review_count,
+            COUNT(CASE WHEN last_scheduled IS NOT NULL AND last_scheduled > NOW() THEN 1 END) as learning_count
+        FROM flashcard f
+        INNER JOIN deck d ON f.deck_id = d.id
+        WHERE d.user_id = $1
+    "#;
+    
+    let stats_row = sqlx::query(stats_query)
+        .bind(&user_id)
+        .fetch_one(&*state.db)
+        .await?;
+    
+    let stats = crate::models::FlashcardStats {
+        new_count: stats_row.get("new_count"),
+        for_review_count: stats_row.get("for_review_count"),
+        learning_count: stats_row.get("learning_count"),
+    };
+
+    let template = templates::Decks { decks, stats };
     handle_render(template.render())
 }
 

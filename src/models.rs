@@ -43,6 +43,15 @@ pub struct FlashcardNew {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FlashcardImport {
+    pub deck_id: i32,
+    pub anki_text: String,
+    pub front_idx: usize,
+    pub back_idx: usize,
+}
+
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FlashcardUpdate {
     pub front: String,
     pub back: String,
@@ -109,4 +118,11 @@ pub struct FlashcardReviewNew {
     pub stability: f32,
     pub difficulty: f32,
     pub flashcard_id: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FlashcardStats {
+    pub new_count: i64,
+    pub for_review_count: i64,
+    pub learning_count: i64,
 }

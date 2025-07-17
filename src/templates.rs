@@ -11,6 +11,7 @@ pub struct WebViewTemplate {
 #[template(path = "decks.html")]
 pub struct Decks {
     pub decks: Vec<models::Deck>,
+    pub stats: models::FlashcardStats,
 }
 
 #[derive(Template)]

@@ -678,3 +678,97 @@ td {
         min-height: auto !important;
     }
 }
+
+/* Flashcard Statistics Styles */
+#flashcard-stats {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    width: 100%;
+}
+
+#flashcard-stats h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.stats-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 100%);
+    border-radius: 8px;
+    border: 1px solid rgba(102, 126, 234, 0.1);
+    transition: all 0.2s ease;
+}
+
+.stat-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.stat-indicator {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.stat-indicator.new {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+}
+
+.stat-indicator.review {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+}
+
+.stat-indicator.learning {
+    background: linear-gradient(135deg, #28a745, #1e7e34);
+}
+
+.stat-text {
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: #333;
+    flex: 1;
+}
+
+/* Desktop adjustments for statistics */
+@media (min-width: 768px) {
+    #flashcard-stats {
+        max-width: 800px;
+        margin-bottom: 24px;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    
+    .stats-container {
+        flex-direction: row;
+        gap: 20px;
+        justify-content: space-between;
+    }
+    
+    .stat-item {
+        flex: 1;
+        justify-content: center;
+        padding: 16px 20px;
+    }
+    
+    .stat-text {
+        font-size: 1rem;
+    }
+}
