@@ -44,6 +44,10 @@ pub fn init_router(db: PgPool, config: AppConfig) -> Router {
             delete(routes::delete_deck).put(routes::update_deck),
         )
         .route(
+            "/decks/{id}/import",
+            get(routes::show_import_form).post(routes::import_deck),
+        )
+        .route(
             "/decks/{deck_id}/flashcards",
             get(routes::view_flashcards_page).post(routes::create_flashcard),
         )

@@ -5,13 +5,14 @@ use axum::{
     Extension, Form,
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{Html, IntoResponse},
 };
 use sqlx::Row;
 
 use crate::{
     errors::ApiError,
-    models::{Deck, DeckNew},
+    import::import_anki_text_to_db,
+    models::{Deck, DeckNew, FlashcardImport},
     router::AppState,
     routes::{check_user_id, handle_render},
     sdk::AuthUser,
@@ -38,12 +39,12 @@ pub async fn fetch_decks(
         INNER JOIN deck d ON f.deck_id = d.id
         WHERE d.user_id = $1
     "#;
-    
+
     let stats_row = sqlx::query(stats_query)
         .bind(&user_id)
         .fetch_one(&*state.db)
         .await?;
-    
+
     let stats = crate::models::FlashcardStats {
         new_count: stats_row.get("new_count"),
         for_review_count: stats_row.get("for_review_count"),
@@ -104,5 +105,62 @@ pub async fn update_deck(
     .await?;
 
     let template = templates::DeckNewTemplate { deck };
+    handle_render(template.render())
+}
+
+pub async fn import_deck(
+    Extension(AuthUser(user_id)): Extension<AuthUser>,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i32>,
+    Form(form): Form<FlashcardImport>,
+) -> Result<impl IntoResponse, ApiError> {
+    let user_id = check_user_id(user_id)?;
+    let deck = sqlx::query_as::<_, Deck>("SELECT * FROM deck WHERE user_id = $1 AND id = $2")
+        .bind(&user_id)
+        .bind(id)
+        .fetch_one(&*state.db)
+        .await?;
+
+    import_anki_text_to_db(
+        &*state.db,
+        deck.id,
+        form.front_idx,
+        form.back_idx,
+        form.anki_text,
+    )
+    .await?;
+
+    // Use HTMX redirect header for cleaner redirect
+    use axum::http::HeaderMap;
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "HX-Redirect",
+        format!("/decks/{}/flashcards", deck.id).parse().unwrap(),
+    );
+
+    Ok((
+        headers,
+        Html(
+            "<div class='alert alert-success'>Flashcards imported successfully!</div>".to_string(),
+        ),
+    ))
+}
+
+pub async fn show_import_form(
+    Extension(AuthUser(user_id)): Extension<AuthUser>,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i32>,
+) -> Result<impl IntoResponse, ApiError> {
+    let user_id = check_user_id(user_id)?;
+    let deck = sqlx::query_as::<_, Deck>("SELECT * FROM deck WHERE user_id = $1 AND id = $2")
+        .bind(&user_id)
+        .bind(id)
+        .fetch_one(&*state.db)
+        .await?;
+
+    let template = templates::DeckImportTemplate {
+        deck,
+        is_authenticated: true,
+    };
     handle_render(template.render())
 }

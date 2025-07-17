@@ -265,20 +265,14 @@ td {
     transform: translateY(-1px);
 }
 
-.btn-cancel {
-    background: #6c757d;
+.btn-info {
+    background: #17a2b8;
     color: white;
 }
 
-.btn-cancel:hover {
-    background: #5a6268;
-}
-
-.btn-sm {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8rem;
-    min-height: 36px;
-    min-width: 60px;
+.btn-info:hover {
+    background: #138496;
+    transform: translateY(-1px);
 }
 
 /* Desktop adjustments for buttons */
@@ -770,5 +764,194 @@ td {
     
     .stat-text {
         font-size: 1rem;
+    }
+}
+
+/* Import Form Styles */
+.import-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.import-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.import-header h1 {
+    color: white;
+    margin: 0;
+    font-size: 1.8rem;
+}
+
+.import-form {
+    background: white;
+    border-radius: 15px;
+    padding: 30px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.form-section {
+    margin-bottom: 30px;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.file-input {
+    width: 100%;
+    padding: 10px;
+    border: 2px dashed #667eea;
+    border-radius: 8px;
+    background: #f8f9ff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.file-input:hover {
+    border-color: #5a6fd8;
+    background: #f0f2ff;
+}
+
+.anki-textarea {
+    width: 100%;
+    min-height: 200px;
+    padding: 15px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 0.9rem;
+    resize: vertical;
+    transition: all 0.2s ease;
+}
+
+.anki-textarea:focus {
+    border-color: #667eea;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.preview-container {
+    background: #f8f9ff;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.preview-label {
+    margin: 0 0 10px 0;
+    font-weight: 600;
+    color: #555;
+}
+
+.field-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.field-item {
+    display: flex;
+    gap: 10px;
+    padding: 8px;
+    background: white;
+    border-radius: 4px;
+    border: 1px solid #e1e5e9;
+}
+
+.field-index {
+    font-weight: 600;
+    color: #667eea;
+    min-width: 70px;
+    flex-shrink: 0;
+}
+
+.field-content {
+    color: #333;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.index-selection {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.index-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.index-group label {
+    font-weight: 600;
+    color: #555;
+}
+
+.index-select {
+    padding: 10px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.index-select:focus {
+    border-color: #667eea;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.btn-large {
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    width: 100%;
+}
+
+.help-text {
+    color: #666;
+    font-size: 0.85rem;
+    margin-top: 5px;
+    margin-bottom: 0;
+}
+
+.import-result {
+    margin-top: 20px;
+}
+
+/* Mobile adjustments for import form */
+@media (max-width: 768px) {
+    .import-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .import-header h1 {
+        font-size: 1.5rem;
+        text-align: center;
+    }
+    
+    .index-selection {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .import-form {
+        padding: 20px;
+        margin: 0 10px;
+    }
+    
+    .import-container {
+        padding: 10px;
     }
 }

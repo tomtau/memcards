@@ -44,12 +44,10 @@ pub struct FlashcardNew {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FlashcardImport {
-    pub deck_id: i32,
     pub anki_text: String,
     pub front_idx: usize,
     pub back_idx: usize,
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FlashcardUpdate {

@@ -21,6 +21,13 @@ pub struct DeckNewTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "deck_import.html")]
+pub struct DeckImportTemplate {
+    pub deck: models::Deck,
+    pub is_authenticated: bool,
+}
+
+#[derive(Template)]
 #[template(path = "flashcards.html")]
 pub struct FlashcardsTemplate {
     pub is_authenticated: bool,

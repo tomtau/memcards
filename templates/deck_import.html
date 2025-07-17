@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Import Flashcards - {{ deck.name }}{% endblock %}
+{% block content %}
+
+<div class="import-container" x-data="importData()">
+    <div class="import-header">
+        <h1>Import Flashcards to "{{ deck.name }}"</h1>
+        <a href="/decks/{{ deck.id }}/flashcards" class="btn btn-secondary">
+            ← Back to Deck
+        </a>
+    </div>
+
+    <div class="import-form">
+        <form id="import-form" 
+              @submit.prevent="submitImport()"
+              hx-post="/decks/{{ deck.id }}/import"
+              hx-trigger="submit"
+              hx-target="#import-result"
+              hx-swap="innerHTML">
+            
+            <!-- File Upload Section -->
+            <div class="form-section">
+                <label class="form-label">
+                    <strong>1. Upload Anki Export File (optional)</strong>
+                </label>
+                <input type="file" 
+                       @change="handleFileUpload($event)"
+                       accept=".txt,.tsv,.csv"
+                       class="file-input">
+                <p class="help-text">Select a text file exported from Anki, or paste content manually below.</p>
+            </div>
+
+            <!-- Text Area Section -->
+            <div class="form-section">
+                <label class="form-label">
+                    <strong>2. Paste Anki Export Content</strong>
+                </label>
+                <textarea name="anki_text" 
+                          x-model="ankiText"
+                          @input="parsePreview()"
+                          placeholder="Paste your Anki export text here..."
+                          class="anki-textarea"
+                          required></textarea>
+                <p class="help-text">Each line should be a flashcard with tab-separated fields.</p>
+            </div>
+
+            <!-- Preview Section -->
+            <div class="form-section" x-show="previewFields.length > 0">
+                <label class="form-label">
+                    <strong>3. Preview First Line</strong>
+                </label>
+                <div class="preview-container">
+                    <p class="preview-label">First data line split by tabs (skipping # comment lines):</p>
+                    <div class="field-preview">
+                        <template x-for="(field, index) in previewFields" :key="index">
+                            <div class="field-item">
+                                <span class="field-index" x-text="`Index ${index}:`"></span>
+                                <span class="field-content" x-text="field || '(empty)'"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Index Selection Section -->
+            <div class="form-section" x-show="previewFields.length > 0">
+                <label class="form-label">
+                    <strong>4. Select Field Indices</strong>
+                </label>
+                <div class="index-selection">
+                    <div class="index-group">
+                        <label for="front_idx">Front (Question) Field:</label>
+                        <select name="front_idx" x-model="frontIdx" required class="index-select">
+                            <option value="">Choose field...</option>
+                            <template x-for="(field, index) in previewFields" :key="index">
+                                <option :value="index" x-text="`Index ${index}: ${field ? field.substring(0, 30) + (field.length > 30 ? '...' : '') : '(empty)'}`"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="index-group">
+                        <label for="back_idx">Back (Answer) Field:</label>
+                        <select name="back_idx" x-model="backIdx" required class="index-select">
+                            <option value="">Choose field...</option>
+                            <template x-for="(field, index) in previewFields" :key="index">
+                                <option :value="index" x-text="`Index ${index}: ${field ? field.substring(0, 30) + (field.length > 30 ? '...' : '') : '(empty)'}`"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Section -->
+            <div class="form-section" x-show="frontIdx !== '' && backIdx !== ''">
+                <button type="submit" class="btn btn-success btn-large">
+                    Import Flashcards
+                </button>
+            </div>
+        </form>
+
+        <!-- Result Section -->
+        <div id="import-result" class="import-result"></div>
+    </div>
+</div>
+
+<script>
+function importData() {
+    return {
+        ankiText: '',
+        previewFields: [],
+        frontIdx: '',
+        backIdx: '',
+        
+        handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.ankiText = e.target.result;
+                    this.parsePreview();
+                };
+                reader.readAsText(file);
+            }
+        },
+        
+        parsePreview() {
+            if (this.ankiText.trim()) {
+                // Find the first non-comment line (lines starting with # are metadata)
+                const lines = this.ankiText.split('\n');
+                const firstDataLine = lines.find(line => line.trim() && !line.trim().startsWith('#'));
+                
+                if (firstDataLine) {
+                    this.previewFields = firstDataLine.split('\t');
+                } else {
+                    this.previewFields = [];
+                }
+                
+                // Reset selections when content changes
+                this.frontIdx = '';
+                this.backIdx = '';
+            } else {
+                this.previewFields = [];
+                this.frontIdx = '';
+                this.backIdx = '';
+            }
+        },
+        
+        submitImport() {
+            // HTMX will handle the actual submission
+            // This is just for any additional client-side logic if needed
+        }
+    }
+}
+
+// Handle import errors (success is handled by HX-Redirect header)
+document.body.addEventListener('htmx:afterRequest', function(event) {
+    if (event.detail.xhr.status >= 400 && event.target.matches('[hx-post*="/import"]')) {
+        // Show error message
+        Swal.fire({
+            title: 'Error!',
+            text: 'Failed to import flashcards. Please check your input and try again.',
+            icon: 'error',
+            confirmButtonColor: '#dc3545'
+        });
+    }
+});
+</script>
+
+{% endblock %}
