@@ -44,4 +44,7 @@ pub struct FlashcardTemplate {
 #[template(path = "flashcard_list.html")]
 pub struct FlashcardListTemplate {
     pub flashcards: Vec<models::Flashcard>,
+    pub deck_id: i32,
+    pub page: u32,
+    pub has_more: bool,
 }

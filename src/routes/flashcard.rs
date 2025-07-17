@@ -3,10 +3,11 @@ use std::sync::Arc;
 use askama::Template;
 use axum::{
     Extension, Form,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
+use serde::Deserialize;
 
 use crate::{
     errors::ApiError,
@@ -16,6 +17,12 @@ use crate::{
     sdk::AuthUser,
     templates::{FlashcardListTemplate, FlashcardTemplate, FlashcardsTemplate},
 };
+
+#[derive(Deserialize)]
+pub struct PaginationQuery {
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+}
 
 async fn get_deck_and_cards(
     state: Arc<AppState>,
@@ -43,14 +50,65 @@ async fn get_deck_and_cards(
     Ok((deck, flashcards))
 }
 
-// List flashcards page for a deck
+async fn get_deck_and_cards_paginated(
+    state: Arc<AppState>,
+    user_id: Option<String>,
+    deck_id: i32,
+    page: u32,
+    limit: u32,
+) -> Result<(Deck, Vec<Flashcard>, bool), ApiError> {
+    let user_id = check_user_id(user_id)?;
+
+    // Get the deck info
+    let deck = sqlx::query_as::<_, Deck>("SELECT * FROM deck WHERE id = $1 AND user_id = $2")
+        .bind(deck_id)
+        .bind(&user_id)
+        .fetch_optional(&*state.db)
+        .await?;
+
+    let deck = deck.ok_or(ApiError::UserNotFoundOrUnauthorized)?;
+
+    let offset = page * limit;
+    
+    // Get flashcards for the deck with pagination (get one extra to check if there are more)
+    let flashcards = sqlx::query_as::<_, Flashcard>(
+        "SELECT * FROM flashcard WHERE deck_id = $1 ORDER BY last_reviewed DESC, id LIMIT $2 OFFSET $3",
+    )
+    .bind(deck_id)
+    .bind((limit + 1) as i64) // Get one extra to check if there are more
+    .bind(offset as i64)
+    .fetch_all(&*state.db)
+    .await?;
+    
+    // Check if there are more flashcards
+    let has_more = flashcards.len() > limit as usize;
+    let mut result_flashcards = flashcards;
+    if has_more {
+        result_flashcards.pop(); // Remove the extra one
+    }
+    
+    Ok((deck, result_flashcards, has_more))
+}
+
+// List flashcards page for a deck (with pagination support)
 pub async fn list_flashcards_page(
     Extension(AuthUser(user_id)): Extension<AuthUser>,
     State(state): State<Arc<AppState>>,
     Path(deck_id): Path<i32>,
+    Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let (_deck, flashcards) = get_deck_and_cards(state, user_id, deck_id).await?;
-    let template = FlashcardListTemplate { flashcards };
+    let page = pagination.page.unwrap_or(0);
+    let limit = pagination.limit.unwrap_or(20); // Default to 20 flashcards per page
+    
+    let (_deck, flashcards, has_more) = get_deck_and_cards_paginated(state, user_id, deck_id, page, limit).await?;
+    
+    // Create the template with pagination info
+    let template = FlashcardListTemplate { 
+        flashcards,
+        deck_id,
+        page,
+        has_more,
+    };
     handle_render(template.render())
 }
 

@@ -1,9 +1,77 @@
-{% for flashcard in flashcards %}
-    {% include "flashcard.html" %}
-{% endfor %}
+<div x-data="infiniteScroll()" @scroll.window="checkScroll()">
+    <!-- Existing flashcards -->
+    {% for flashcard in flashcards %}
+        {% include "flashcard.html" %}
+    {% endfor %}
 
-{% if flashcards.is_empty() %}
-<div class="no-flashcards">
-    <p>No flashcards yet. Create your first flashcard above!</p>
+    <!-- Load more section (shown when there are more flashcards) -->
+    {% if has_more %}
+    <div class="load-more-container" id="load-more-trigger" x-ref="loadTrigger">
+        <button 
+            class="btn btn-secondary load-more-btn"
+            hx-get="/decks/{{ deck_id }}/flashcards/list?page={{ page + 1 }}&limit=20"
+            hx-target="#load-more-trigger"
+            hx-swap="outerHTML"
+            hx-indicator="#loading-indicator"
+            @click="loadMore()"
+            x-show="!isLoading"
+        >
+            Load More Flashcards
+        </button>
+        <div id="loading-indicator" class="loading-indicator" x-show="isLoading">
+            <div class="spinner"></div>
+            <span>Loading more flashcards...</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Empty state (shown when no flashcards and it's the first page) -->
+    {% if flashcards.is_empty() && page == 0 %}
+    <div class="no-flashcards">
+        <p>No flashcards yet. Create your first flashcard above!</p>
+    </div>
+    {% endif %}
 </div>
-{% endif %}
+
+<script>
+function infiniteScroll() {
+    return {
+        isLoading: false,
+        
+        loadMore() {
+            this.isLoading = true;
+        },
+        
+        checkScroll() {
+            // Auto-load when user scrolls near the bottom (200px from bottom)
+            const trigger = this.$refs.loadTrigger;
+            if (!trigger || this.isLoading) return;
+            
+            const rect = trigger.getBoundingClientRect();
+            const windowHeight = window.innerHeight;
+            
+            // If the load trigger is visible or close to being visible, trigger load
+            if (rect.top < windowHeight + 200) {
+                const button = trigger.querySelector('button');
+                if (button) {
+                    button.click();
+                }
+            }
+        }
+    }
+}
+
+// Reset loading state after HTMX requests
+document.body.addEventListener('htmx:afterRequest', function(event) {
+    if (event.target.matches('[hx-get*="/flashcards/list"]')) {
+        // Find Alpine component and reset loading state
+        const component = event.target.closest('[x-data]');
+        if (component && component._x_dataStack) {
+            const data = component._x_dataStack[0];
+            if (data.isLoading !== undefined) {
+                data.isLoading = false;
+            }
+        }
+    }
+});
+</script>
