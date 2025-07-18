@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU8, Ordering},
@@ -9,6 +8,7 @@ use std::{
 use anyhow::bail;
 use chrono::{TimeDelta, Utc};
 use crossbeam_queue::ArrayQueue;
+use dashmap::DashMap;
 use fsrs::{DEFAULT_PARAMETERS, FSRS, MemoryState};
 use futures_util::{SinkExt, stream::SplitSink};
 use sqlx::{PgPool, Row};
@@ -117,7 +117,7 @@ fn schedule_states(card: &Flashcard, desired_retention: f32) -> anyhow::Result<f
 
 pub struct SessionState {
     cards: ArrayQueue<Flashcard>,
-    deck_names: HashMap<i32, String>,
+    deck_names: DashMap<i32, String>,
     started: AtomicBool,
     app_state: Arc<PgPool>,
     user_id: String,
@@ -133,7 +133,7 @@ async fn next_card_or_finish(text: String, session_state: &SessionState) {
             let deck_name = session_state
                 .deck_names
                 .get(&last_card.deck_id)
-                .cloned()
+                .map(|d| d.to_string())
                 .unwrap_or_default();
             let top_text = last_card.front.clone();
             session_state.last_card.lock().await.replace(last_card);
@@ -310,53 +310,92 @@ fn update_user_settings(user_settings: Arc<UserSettings>, payload: &serde_json::
     }
 }
 
-impl AppState {
-    async fn get_cards(
-        &self,
-        user_id: &str,
-        limit: usize,
-    ) -> Result<(HashMap<i32, String>, ArrayQueue<Flashcard>)> {
-        let deck_names = sqlx::query(
-            r#"
+async fn get_cards(
+    db: Arc<PgPool>,
+    user_id: &str,
+    limit: usize,
+) -> Result<(DashMap<i32, String>, ArrayQueue<Flashcard>)> {
+    let deck_names = sqlx::query(
+        r#"
             SELECT id, name FROM deck WHERE user_id = $1
             "#,
-        )
-        .bind(user_id)
-        .fetch_all(&*self.db)
-        .await?;
+    )
+    .bind(user_id)
+    .fetch_all(&*db)
+    .await?;
 
-        let deck_names = deck_names
-            .into_iter()
-            .map(|row| {
-                let id: i32 = row.get("id");
-                let name: String = row.get("name");
-                (id, name)
-            })
-            .collect::<HashMap<_, _>>();
+    let deck_names = deck_names
+        .into_iter()
+        .map(|row| {
+            let id: i32 = row.get("id");
+            let name: String = row.get("name");
+            (id, name)
+        })
+        .collect::<DashMap<_, _>>();
 
-        // Fetch flashcards ordered by scheduled time (with null being first)
-        // limited to `limit`
-        let flashcards = sqlx::query_as::<_, Flashcard>(
-            r#"
+    // Fetch flashcards ordered by scheduled time (with null being first)
+    // limited to `limit`
+    let flashcards = sqlx::query_as::<_, Flashcard>(
+        r#"
             SELECT * FROM flashcard
             WHERE deck_id IN (SELECT id FROM deck WHERE user_id = $1)
             AND last_scheduled <= NOW() OR last_scheduled IS NULL
-            ORDER BY last_scheduled NULLS FIRST, id
+            ORDER BY last_scheduled NULLS LAST, id
             LIMIT $2
             "#,
-        )
-        .bind(user_id)
-        .bind(limit as i64)
-        .fetch_all(&*self.db)
-        .await?;
-        let cards = ArrayQueue::new(100);
-        for card in flashcards {
-            cards.force_push(card);
-        }
-
-        Ok((deck_names, cards))
+    )
+    .bind(user_id)
+    .bind(limit as i64)
+    .fetch_all(&*db)
+    .await?;
+    let cards = ArrayQueue::new(100);
+    for card in flashcards {
+        cards.force_push(card);
     }
 
+    Ok((deck_names, cards))
+}
+
+async fn on_init(session_state: Arc<SessionState>) {
+    if let Some(sender_arc) = &session_state.sender {
+        let text = if session_state.cards.is_empty() {
+            "No flashcards scheduled for review now.\nPlease add flashcards in the Mentra app interface.".to_string()
+        } else {
+            let card_count = if session_state.cards.len() == 1 {
+                "1 card".to_string()
+            } else {
+                format!("{} cards", session_state.cards.len())
+            };
+            format!(
+                "{card_count} for review. Say 'start' to begin.\nSay 'reveal' to display the back answer on each card.\nSay 'easy', 'good', 'difficult', or 'again'\nto rate your card memorization."
+            )
+        };
+        // Create DisplayRequest matching the Rust DisplayRequest structure
+        let display_request = DisplayRequest {
+            r#type: "display_event".to_string(),
+            package_name: session_state.package_name.clone(),
+            session_id: "".to_string(), // Empty like TypeScript version
+            view: ViewType::Main,
+            layout: Layout::TextWall { text },
+            duration_ms: None,
+            timestamp: Utc::now().to_rfc3339(),
+        };
+
+        if let Ok(display_json) = serde_json::to_string(&display_request) {
+            debug!("Init message: {}", display_json);
+            let websocket_msg = Message::Text(display_json.into());
+
+            let mut sender_guard = sender_arc.lock().await;
+            if let Err(e) = sender_guard.send(websocket_msg).await {
+                error!("Failed to send display_event message: {}", e);
+            } else {
+                info!("sent initial display_event message");
+            }
+        }
+    }
+}
+
+impl AppState {
     /// Called when a new session is created and connected
     pub async fn on_session(
         &self,
@@ -382,12 +421,12 @@ impl AppState {
                 e
             })?;
 
-        let (deck_names, cards) = self
-            .get_cards(
-                user_id,
-                session.user_settings.max_cards_per_session() as usize,
-            )
-            .await?;
+        let (deck_names, cards) = get_cards(
+            self.db.clone(),
+            user_id,
+            session.user_settings.max_cards_per_session() as usize,
+        )
+        .await?;
         if cards.is_empty() {
             session
                 .show_text(
@@ -417,15 +456,91 @@ impl AppState {
             package_name: session.package_name.clone(),
         });
         let user_settings: Arc<UserSettings> = session.user_settings.clone();
+        let session_state_in = session_state.clone();
+        let db = self.db.clone();
         session.events().on_system("connected", move |event| {
             if let SystemEvent::Connected(Some(settings)) = event {
                 update_user_settings(user_settings.clone(), settings);
+                if !session_state_in.started.load(Ordering::Relaxed)
+                    && session_state_in.cards.len() > 0
+                    && session_state_in.cards.len()
+                        != user_settings.max_cards_per_session() as usize
+                {
+                    let db = db.clone();
+                    let session_state_in = session_state_in.clone();
+
+                    tokio::spawn(async move {
+                        match get_cards(
+                            db.clone(),
+                            &session_state_in.user_id,
+                            session_state_in.user_settings.max_cards_per_session() as usize,
+                        )
+                        .await
+                        {
+                            Ok((deck_names, cards)) => {
+                                while (session_state_in.cards.len() > 0) {
+                                    let _ = session_state_in.cards.pop().is_some();
+                                }
+                                for card in cards {
+                                    session_state_in.cards.force_push(card);
+                                }
+                                session_state_in.deck_names.clear();
+                                for (id, name) in deck_names {
+                                    session_state_in.deck_names.insert(id, name);
+                                }
+                                info!("Updated session state with new cards and deck names");
+                                on_init(session_state_in).await;
+                            }
+                            Err(e) => {
+                                error!("Failed to fetch cards: {}", e);
+                            }
+                        }
+                    });
+                }
             }
         });
         let user_settings: Arc<UserSettings> = session.user_settings.clone();
+        let session_state_in = session_state.clone();
+        let db = self.db.clone();
         session.events().on_system("settings_update", move |event| {
             if let SystemEvent::SettingsUpdate(settings) = event {
                 update_user_settings(user_settings.clone(), settings);
+                if !session_state_in.started.load(Ordering::Relaxed)
+                    && session_state_in.cards.len() > 0
+                    && session_state_in.cards.len()
+                        != user_settings.max_cards_per_session() as usize
+                {
+                    let db = db.clone();
+                    let session_state_in = session_state_in.clone();
+
+                    tokio::spawn(async move {
+                        match get_cards(
+                            db.clone(),
+                            &session_state_in.user_id,
+                            session_state_in.user_settings.max_cards_per_session() as usize,
+                        )
+                        .await
+                        {
+                            Ok((deck_names, cards)) => {
+                                while (session_state_in.cards.len() > 0) {
+                                    let _ = session_state_in.cards.pop().is_some();
+                                }
+                                for card in cards {
+                                    session_state_in.cards.force_push(card);
+                                }
+                                session_state_in.deck_names.clear();
+                                for (id, name) in deck_names {
+                                    session_state_in.deck_names.insert(id, name);
+                                }
+                                info!("Updated session state with new cards and deck names");
+                                on_init(session_state_in).await;
+                            }
+                            Err(e) => {
+                                error!("Failed to fetch cards: {}", e);
+                            }
+                        }
+                    });
+                }
             }
         });
         let session_state_in = session_state.clone();

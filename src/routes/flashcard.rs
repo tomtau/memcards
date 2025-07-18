@@ -69,7 +69,7 @@ async fn get_deck_and_cards_paginated(
     let deck = deck.ok_or(ApiError::UserNotFoundOrUnauthorized)?;
 
     let offset = page * limit;
-    
+
     // Get flashcards for the deck with pagination (get one extra to check if there are more)
     let flashcards = sqlx::query_as::<_, Flashcard>(
         "SELECT * FROM flashcard WHERE deck_id = $1 ORDER BY last_reviewed DESC, id LIMIT $2 OFFSET $3",
@@ -79,14 +79,14 @@ async fn get_deck_and_cards_paginated(
     .bind(offset as i64)
     .fetch_all(&*state.db)
     .await?;
-    
+
     // Check if there are more flashcards
     let has_more = flashcards.len() > limit as usize;
     let mut result_flashcards = flashcards;
     if has_more {
         result_flashcards.pop(); // Remove the extra one
     }
-    
+
     Ok((deck, result_flashcards, has_more))
 }
 
@@ -99,11 +99,12 @@ pub async fn list_flashcards_page(
 ) -> Result<impl IntoResponse, ApiError> {
     let page = pagination.page.unwrap_or(0);
     let limit = pagination.limit.unwrap_or(20); // Default to 20 flashcards per page
-    
-    let (_deck, flashcards, has_more) = get_deck_and_cards_paginated(state, user_id, deck_id, page, limit).await?;
-    
+
+    let (_deck, flashcards, has_more) =
+        get_deck_and_cards_paginated(state, user_id, deck_id, page, limit).await?;
+
     // Create the template with pagination info
-    let template = FlashcardListTemplate { 
+    let template = FlashcardListTemplate {
         flashcards,
         deck_id,
         page,
