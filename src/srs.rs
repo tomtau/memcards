@@ -1,8 +1,6 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicU8, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicU8, Ordering},
 };
 
 use anyhow::bail;
@@ -478,7 +476,7 @@ impl AppState {
                         .await
                         {
                             Ok((deck_names, cards)) => {
-                                while (session_state_in.cards.len() > 0) {
+                                while session_state_in.cards.len() > 0 {
                                     let _ = session_state_in.cards.pop().is_some();
                                 }
                                 for card in cards {
@@ -522,7 +520,7 @@ impl AppState {
                         .await
                         {
                             Ok((deck_names, cards)) => {
-                                while (session_state_in.cards.len() > 0) {
+                                while session_state_in.cards.len() > 0 {
                                     let _ = session_state_in.cards.pop().is_some();
                                 }
                                 for card in cards {
