@@ -138,6 +138,18 @@ h1 {
 table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed; /* Enable fixed table layout for better column control */
+}
+
+/* Column width specifications */
+table th:first-child,
+table td:first-child {
+    width: 60%; /* Deck name column gets 60% of the width */
+}
+
+table th:last-child,
+table td:last-child {
+    width: 40%; /* Actions column gets 40% of the width */
 }
 
 thead {
@@ -152,6 +164,11 @@ th {
     font-size: 0.9rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+/* Right-align the Actions column header */
+th:last-child {
+    text-align: right;
 }
 
 tbody tr {
@@ -172,11 +189,17 @@ td {
     vertical-align: middle;
 }
 
+/* Right-align the actions column content */
+td:last-child {
+    text-align: right;
+}
+
 .deck-name {
     font-size: 1rem;
     font-weight: 500;
     color: #333;
     word-break: break-word;
+    padding-right: 1rem; /* Add some spacing from the actions */
 }
 
 /* Desktop adjustments for deck list */
@@ -185,6 +208,17 @@ td {
         max-width: 800px;
         border-radius: 15px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    
+    /* Better column distribution on desktop */
+    table th:first-child,
+    table td:first-child {
+        width: 65%; /* Slightly more space for deck names on desktop */
+    }
+    
+    table th:last-child,
+    table td:last-child {
+        width: 35%;
     }
     
     th {
@@ -198,6 +232,27 @@ td {
     
     .deck-name {
         font-size: 1.1rem;
+        padding-right: 1.5rem; /* More spacing on desktop */
+    }
+    
+    .deck-actions {
+        gap: 0.75rem; /* Slightly larger gap between buttons on desktop */
+    }
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 767px) {
+    /* Stack buttons vertically on very small screens if needed */
+    .deck-actions {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.5rem;
+    }
+    
+    .deck-actions .btn {
+        width: 100%;
+        max-width: 120px; /* Prevent buttons from being too wide */
+        text-align: center;
     }
 }
 
@@ -297,7 +352,14 @@ td {
     flex-wrap: wrap;
     gap: 0.5rem;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: flex-end; /* Right-align the buttons */
+    min-height: 44px; /* Ensure consistent height */
+}
+
+/* Ensure buttons in deck actions have consistent spacing */
+.deck-actions .btn {
+    flex-shrink: 0; /* Prevent buttons from shrinking */
+    white-space: nowrap; /* Prevent text wrapping in buttons */
 }
 
 /* Loading state */
