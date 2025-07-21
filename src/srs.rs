@@ -115,6 +115,7 @@ pub struct SessionState {
     cards: ArrayQueue<Flashcard>,
     deck_names: DashMap<i32, String>,
     started: AtomicBool,
+    revealed: AtomicBool,
     app_state: Arc<PgPool>,
     user_id: String,
     last_card: Arc<Mutex<Option<Flashcard>>>,
@@ -156,6 +157,7 @@ async fn next_card_or_finish(text: String, session_state: &SessionState) {
             .unwrap_or_default();
         let top_text = last_card.front.clone();
         session_state.last_card.lock().await.replace(last_card);
+        session_state.revealed.store(false, Ordering::Relaxed);
         session_state.layout_manager.show_double_text_wall(
             top_text,
             format!("{deck_name} ({} left)", session_state.cards.len()),
@@ -213,6 +215,7 @@ async fn update_rating(
 }
 
 async fn on_reveal(session_state: Arc<SessionState>) {
+    session_state.revealed.store(true, Ordering::Relaxed);
     if let Some(card) = session_state.last_card.lock().await.clone() {
         info!("Revealing card: {}", card.front);
         let display_request =
@@ -227,13 +230,14 @@ async fn on_reveal(session_state: Arc<SessionState>) {
 
 async fn on_transcription(text: String, session_state: Arc<SessionState>) -> Result<()> {
     let started = session_state.started.load(Ordering::Relaxed);
+    let revealed = session_state.revealed.load(Ordering::Relaxed);
     info!("Received transcription: {}", text);
     let text = text.trim().to_lowercase();
     if started {
         // If already started, handle the transcription
         if text.contains("reveal") {
             on_reveal(session_state).await;
-        } else if let Ok(rating) = text.parse::<CardRating>() {
+        } else if revealed && let Ok(rating) = text.parse::<CardRating>() {
             if let Some(card) = session_state.last_card.lock().await.clone() {
                 info!("Rating card {} as {}", card.id, rating);
                 // Here you would handle the rating logic
@@ -418,6 +422,7 @@ impl AppState {
             cards,
             deck_names,
             started: AtomicBool::new(false),
+            revealed: AtomicBool::new(false),
             app_state: self.db.clone(),
             user_id: user_id.to_string(),
             last_card: Arc::new(Mutex::new(None)),
@@ -472,14 +477,12 @@ impl AppState {
             // Send the transcription text back to the client using display_event
             let text = transcription.text.clone();
             let session_state: Arc<SessionState> = session_state.clone();
-            if transcription.is_final {
-                tokio::spawn(async move {
-                    let session_state = session_state;
-                    if let Err(e) = on_transcription(text, session_state.clone()).await {
-                        error!("Failed to process transcription: {}", e);
-                    }
-                });
-            }
+            tokio::spawn(async move {
+                let session_state = session_state;
+                if let Err(e) = on_transcription(text, session_state.clone()).await {
+                    error!("Failed to process transcription: {}", e);
+                }
+            });
         });
         // Default implementation - can be overridden
         Ok(())
