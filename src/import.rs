@@ -4,11 +4,11 @@ use anyhow::Result;
 use sqlx::PgPool;
 
 fn import_anki_text(front_idx: usize, back_idx: usize, file: String) -> HashMap<String, String> {
-    let mut lines = file.lines();
+    let lines = file.lines();
     let mut separator = '\t';
     let sep = "#separator:";
     let mut flashcards = HashMap::new();
-    while let Some(line) = lines.next() {
+    for line in lines {
         if line.starts_with('#') {
             if line.starts_with(sep) {
                 let trimmed = line.trim_start_matches(sep);

@@ -3,8 +3,7 @@ use std::sync::Arc;
 use tracing::error;
 
 use crate::sdk::events::{
-    ButtonPressData, EventData, HeadPositionData, LocationData, StreamType, SystemEvent,
-    TranscriptionData, VadData,
+    ButtonPressData, EventData, HeadPositionData, StreamType, SystemEvent, TranscriptionData,
 };
 
 /// Type alias for event handlers
@@ -96,30 +95,6 @@ impl EventManager {
         })
     }
 
-    /// Convenience method for location updates
-    pub fn on_location<F>(&self, handler: F)
-    where
-        F: Fn(&LocationData) + Send + Sync + 'static,
-    {
-        self.on_stream(StreamType::LocationUpdate, move |data| {
-            if let EventData::LocationUpdate(location) = data {
-                handler(location);
-            }
-        })
-    }
-
-    /// Convenience method for voice activity detection
-    pub fn on_voice_activity<F>(&self, handler: F)
-    where
-        F: Fn(&VadData) + Send + Sync + 'static,
-    {
-        self.on_stream(StreamType::Vad, move |data| {
-            if let EventData::VoiceActivity(vad) = data {
-                handler(vad);
-            }
-        })
-    }
-
     /// Emit a stream event to all registered handlers
     pub fn emit_stream_event(&self, stream_type: &StreamType, data: &EventData) {
         if let Some(stream_handlers) = self.stream_handlers.get(stream_type) {
@@ -150,16 +125,5 @@ impl EventManager {
                 }
             }
         }
-    }
-
-    /// Get the list of currently active stream subscriptions
-    pub fn get_active_subscriptions(&self) -> Vec<String> {
-        self.active_subscriptions
-            .iter()
-            .map(|s| {
-                let s = s.to_owned();
-                format!("{s:?}").to_lowercase()
-            })
-            .collect()
     }
 }

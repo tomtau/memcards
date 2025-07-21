@@ -122,7 +122,7 @@ pub async fn import_deck(
         .await?;
 
     import_anki_text_to_db(
-        &*state.db,
+        &state.db,
         deck.id,
         form.front_idx,
         form.back_idx,

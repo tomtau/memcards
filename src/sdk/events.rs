@@ -10,25 +10,26 @@ pub enum StreamType {
     Translation,
     GlassesBatteryUpdate,
     PhoneBatteryUpdate,
-    GlassesConnectionState,
     LocationUpdate,
     CalendarEvent,
     Vad,
-    NotificationDismissed,
     AudioChunk,
-    Video,
-    RtmpStreamStatus,
     VpsCoordinates,
     PhotoTaken,
-    OpenDashboard,
-    StartApp,
-    StopApp,
     All,
-    Wildcard,
+    // Wildcard,
+    // GlassesConnectionState,
+    // NotificationDismissed,
+    // OpenDashboard,
+    // StartApp,
+    // StopApp,
+    // Video,
+    // RtmpStreamStatus,
 }
 
 /// System events not tied to data streams
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum SystemEvent {
     Connected(Option<serde_json::Value>), // App settings
     Disconnected(String),
@@ -85,7 +86,9 @@ pub struct ButtonPressData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HeadPositionData {
     pub position: String,
-    pub timestamp: String,
+    pub timestamp: u64,
+    #[serde(rename = "type")]
+    pub data_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

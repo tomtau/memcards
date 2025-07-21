@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU8, Ordering},
 };
 
-use anyhow::bail;
+use anyhow::{Context, bail};
 use chrono::{TimeDelta, Utc};
 use crossbeam_queue::ArrayQueue;
 use dashmap::DashMap;
@@ -14,16 +14,15 @@ use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use tracing::{debug, error, info};
 
-use crate::sdk::{
-    events::SystemEvent,
-    location_manager::{DisplayRequest, Layout, ViewType},
-};
+use crate::sdk::layout_manager::LayoutManager;
+use crate::sdk::{events::SystemEvent, layout_manager::DisplayRequest};
 use crate::{
     models::{CardRating, Flashcard, FlashcardReviewNew},
     router::AppState,
     sdk::app_session::AppSession,
 };
 use anyhow::Result;
+use serde_json::Value;
 
 #[derive(Debug)]
 pub struct UserSettings {
@@ -40,19 +39,16 @@ impl UserSettings {
     }
 
     pub fn max_cards_per_session(&self) -> u8 {
-        self.max_cards_per_session
-            .load(std::sync::atomic::Ordering::Relaxed)
+        self.max_cards_per_session.load(Ordering::Relaxed)
     }
 
     pub fn desired_retention(&self) -> u8 {
-        self.desired_retention
-            .load(std::sync::atomic::Ordering::Relaxed)
+        self.desired_retention.load(Ordering::Relaxed)
     }
 
     pub fn set_max_cards_per_session(&self, value: u8) {
         if value <= 100 && value > 0 {
-            self.max_cards_per_session
-                .store(value, std::sync::atomic::Ordering::Relaxed);
+            self.max_cards_per_session.store(value, Ordering::Relaxed);
         } else {
             error!("Invalid max cards per session: {}", value);
         }
@@ -60,8 +56,7 @@ impl UserSettings {
 
     pub fn set_desired_retention(&self, value: u8) {
         if value <= 100 && value > 0 {
-            self.desired_retention
-                .store(value, std::sync::atomic::Ordering::Relaxed);
+            self.desired_retention.store(value, Ordering::Relaxed);
         } else {
             error!("Invalid desired retention: {}", value);
         }
@@ -94,7 +89,7 @@ pub fn new_review(
     })
 }
 
-fn schedule_states(card: &Flashcard, desired_retention: f32) -> anyhow::Result<fsrs::NextStates> {
+fn schedule_states(card: &Flashcard, desired_retention: f32) -> Result<fsrs::NextStates> {
     let fsrs = FSRS::new(Some(&DEFAULT_PARAMETERS))?;
 
     let next_states = if card.last_reviewed.is_none() {
@@ -113,6 +108,9 @@ fn schedule_states(card: &Flashcard, desired_retention: f32) -> anyhow::Result<f
     Ok(next_states)
 }
 
+pub(crate) type WebSocketSender =
+    Option<Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>;
+
 pub struct SessionState {
     cards: ArrayQueue<Flashcard>,
     deck_names: DashMap<i32, String>,
@@ -121,64 +119,63 @@ pub struct SessionState {
     user_id: String,
     last_card: Arc<Mutex<Option<Flashcard>>>,
     user_settings: Arc<UserSettings>,
-    sender: Option<Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>>>,
+    sender: WebSocketSender,
     package_name: String,
+    layout_manager: LayoutManager,
 }
 
-async fn next_card_or_finish(text: String, session_state: &SessionState) {
-    if let Some(sender_arc) = &session_state.sender {
-        let display_request = if let Some(last_card) = session_state.cards.pop() {
-            let deck_name = session_state
-                .deck_names
-                .get(&last_card.deck_id)
-                .map(|d| d.to_string())
-                .unwrap_or_default();
-            let top_text = last_card.front.clone();
-            session_state.last_card.lock().await.replace(last_card);
-            DisplayRequest {
-                r#type: "display_event".to_string(),
-                package_name: session_state.package_name.clone(),
-                session_id: "".to_string(), // Empty like TypeScript version
-                view: ViewType::Main,
-                layout: Layout::DoubleTextWall {
-                    top_text,
-                    bottom_text: format!("{deck_name} ({} left)", session_state.cards.len()),
-                },
-                duration_ms: None,
-                timestamp: Utc::now().to_rfc3339(),
+impl SessionState {
+    /// Send a display request to AugmentOS Cloud
+    pub async fn send_display_request(&self, display_request: &DisplayRequest) -> Result<()> {
+        let display_json = serde_json::to_string(display_request)
+            .context("Failed to serialize display request")?;
+        debug!(
+            "📺 [{}] Sending display request: {}",
+            self.package_name, display_json
+        );
+        if let Some(sender) = &self.sender {
+            let mut ws_sender = sender.lock().await;
+            if let Err(e) = ws_sender.send(Message::Text(display_json.into())).await {
+                bail!("Failed to send display request: {e}");
             }
+            debug!("📺 [{}] Sent display request", self.package_name);
+            Ok(())
         } else {
-            info!("All cards reviewed");
-            DisplayRequest {
-                r#type: "display_event".to_string(),
-                package_name: session_state.package_name.clone(),
-                session_id: "".to_string(), // Empty like TypeScript version
-                view: ViewType::Main,
-                layout: Layout::TextWall {
-                    text:
-                        "All cards reviewed! You can end the session in the Mentra app interface."
-                            .to_string(),
-                },
-                duration_ms: None,
-                timestamp: Utc::now().to_rfc3339(),
-            }
-        };
-
-        if let Ok(display_json) = serde_json::to_string(&display_request) {
-            debug!("📺 Processing: {}", display_json);
-            let websocket_msg = Message::Text(display_json.into());
-
-            let mut sender_guard = sender_arc.lock().await;
-            if let Err(e) = sender_guard.send(websocket_msg).await {
-                error!("Failed to send display_event message: {}", e);
-            } else {
-                info!("✅ Processing: {}", text);
-            }
+            bail!("WebSocket sender not available");
         }
     }
 }
 
-async fn update_rating<'s>(
+async fn next_card_or_finish(text: String, session_state: &SessionState) {
+    info!("Next command: {text}");
+    let display_request = if let Some(last_card) = session_state.cards.pop() {
+        let deck_name = session_state
+            .deck_names
+            .get(&last_card.deck_id)
+            .map(|d| d.to_string())
+            .unwrap_or_default();
+        let top_text = last_card.front.clone();
+        session_state.last_card.lock().await.replace(last_card);
+        session_state.layout_manager.show_double_text_wall(
+            top_text,
+            format!("{deck_name} ({} left)", session_state.cards.len()),
+            None,
+            None,
+        )
+    } else {
+        info!("All cards reviewed");
+        session_state.layout_manager.show_text_wall(
+            "All cards reviewed! You can end the session in the Mentra app\ninterface.",
+            None,
+            None,
+        )
+    };
+    if let Err(e) = session_state.send_display_request(&display_request).await {
+        error!("Failed to send display request: {e}");
+    }
+}
+
+async fn update_rating(
     card: &Flashcard,
     rating: CardRating,
     session_state: &SessionState,
@@ -218,33 +215,12 @@ async fn update_rating<'s>(
 async fn on_reveal(session_state: Arc<SessionState>) {
     if let Some(card) = session_state.last_card.lock().await.clone() {
         info!("Revealing card: {}", card.front);
-        // Here you would send the back of the card to the client
-        if let Some(sender_arc) = &session_state.sender {
-            // Create DisplayRequest matching the Rust DisplayRequest structure
-            let display_request = DisplayRequest {
-                r#type: "display_event".to_string(),
-                package_name: session_state.package_name.clone(),
-                session_id: "".to_string(), // Empty like TypeScript version
-                view: ViewType::Main,
-                layout: Layout::DoubleTextWall {
-                    top_text: card.front.clone(),
-                    bottom_text: card.back.clone(),
-                },
-                duration_ms: None,
-                timestamp: Utc::now().to_rfc3339(),
-            };
-
-            if let Ok(display_json) = serde_json::to_string(&display_request) {
-                debug!("📺 Revealing card: {}", display_json);
-                let websocket_msg = Message::Text(display_json.into());
-
-                let mut sender_guard = sender_arc.lock().await;
-                if let Err(e) = sender_guard.send(websocket_msg).await {
-                    error!("Failed to send display_event message: {}", e);
-                } else {
-                    info!("✅ Revealed card: {}", card.front);
-                }
-            }
+        let display_request =
+            session_state
+                .layout_manager
+                .show_double_text_wall(&card.front, card.back, None, None);
+        if let Err(e) = session_state.send_display_request(&display_request).await {
+            error!("Failed to send display request: {e}");
         }
     }
 }
@@ -280,24 +256,16 @@ async fn on_transcription(text: String, session_state: Arc<SessionState>) -> Res
     Ok(())
 }
 
-fn update_user_settings(user_settings: Arc<UserSettings>, payload: &serde_json::Value) {
+fn update_user_settings(user_settings: Arc<UserSettings>, payload: &Value) {
     let mut new_max_cards_per_session = None;
     let mut new_desired_retention = None;
     if let Some(settings) = payload.as_array() {
         for setting in settings {
-            if let Some(key) = setting.get("key").and_then(|k| k.as_str()) {
-                if key == "max_cards_per_session" {
-                    new_max_cards_per_session = setting
-                        .get("value")
-                        .and_then(|v| v.as_u64())
-                        .filter(|x| *x > 0 && *x <= 100);
-                } else if key == "desired_retention" {
-                    new_desired_retention = setting
-                        .get("value")
-                        .and_then(|v| v.as_u64())
-                        .filter(|x| *x > 0 && *x <= 100);
-                }
-            }
+            extract_settings(
+                &mut new_max_cards_per_session,
+                &mut new_desired_retention,
+                setting,
+            );
         }
     }
     if let Some(max_cards) = new_max_cards_per_session {
@@ -305,6 +273,26 @@ fn update_user_settings(user_settings: Arc<UserSettings>, payload: &serde_json::
     }
     if let Some(retention) = new_desired_retention {
         user_settings.set_desired_retention(retention as u8);
+    }
+}
+
+pub(crate) fn extract_settings(
+    new_max_cards_per_session: &mut Option<u64>,
+    new_desired_retention: &mut Option<u64>,
+    setting: &Value,
+) {
+    if let Some(key) = setting.get("key").and_then(|k| k.as_str()) {
+        if key == "max_cards_per_session" {
+            *new_max_cards_per_session = setting
+                .get("value")
+                .and_then(|v| v.as_u64())
+                .filter(|x| *x > 0 && *x <= 100);
+        } else if key == "desired_retention" {
+            *new_desired_retention = setting
+                .get("value")
+                .and_then(|v| v.as_u64())
+                .filter(|x| *x > 0 && *x <= 100);
+        }
     }
 }
 
@@ -355,41 +343,25 @@ async fn get_cards(
 }
 
 async fn on_init(session_state: Arc<SessionState>) {
-    if let Some(sender_arc) = &session_state.sender {
-        let text = if session_state.cards.is_empty() {
-            "No flashcards scheduled for review now.\nPlease add flashcards in the Mentra app interface.".to_string()
+    let text = if session_state.cards.is_empty() {
+        "No flashcards scheduled for review now.\nPlease add flashcards in the Mentra app interface.".to_string()
+    } else {
+        let card_count = if session_state.cards.len() == 1 {
+            "1 card".to_string()
         } else {
-            let card_count = if session_state.cards.len() == 1 {
-                "1 card".to_string()
-            } else {
-                format!("{} cards", session_state.cards.len())
-            };
-            format!(
-                "{card_count} for review. Say 'start' to begin.\nSay 'reveal' to display the back answer on each card.\nSay 'easy', 'good', 'difficult', or 'again'\nto rate your card memorization."
-            )
+            format!("{} cards", session_state.cards.len())
         };
-        // Create DisplayRequest matching the Rust DisplayRequest structure
-        let display_request = DisplayRequest {
-            r#type: "display_event".to_string(),
-            package_name: session_state.package_name.clone(),
-            session_id: "".to_string(), // Empty like TypeScript version
-            view: ViewType::Main,
-            layout: Layout::TextWall { text },
-            duration_ms: None,
-            timestamp: Utc::now().to_rfc3339(),
-        };
+        format!(
+            "{card_count} for review. Say 'start' to begin.\nLook up or say 'reveal' to display the back answer on each card.\nSay 'easy', 'good', 'difficult', or 'again'\nto rate your card memorization."
+        )
+    };
+    // Create DisplayRequest matching the Rust DisplayRequest structure
+    let display_request = session_state
+        .layout_manager
+        .show_text_wall(text, None, None);
 
-        if let Ok(display_json) = serde_json::to_string(&display_request) {
-            debug!("Init message: {}", display_json);
-            let websocket_msg = Message::Text(display_json.into());
-
-            let mut sender_guard = sender_arc.lock().await;
-            if let Err(e) = sender_guard.send(websocket_msg).await {
-                error!("Failed to send display_event message: {}", e);
-            } else {
-                info!("sent initial display_event message");
-            }
-        }
+    if let Err(e) = session_state.send_display_request(&display_request).await {
+        error!("Error sending display request: {e}");
     }
 }
 
@@ -452,6 +424,10 @@ impl AppState {
             user_settings: session.user_settings.clone(),
             sender: sender_clone,
             package_name: session.package_name.clone(),
+            layout_manager: LayoutManager::new(
+                session.package_name.clone(),
+                session_id.to_string(),
+            ),
         });
         let user_settings: Arc<UserSettings> = session.user_settings.clone();
         let session_state_in = session_state.clone();
@@ -459,42 +435,9 @@ impl AppState {
         session.events().on_system("connected", move |event| {
             if let SystemEvent::Connected(Some(settings)) = event {
                 update_user_settings(user_settings.clone(), settings);
-                if !session_state_in.started.load(Ordering::Relaxed)
-                    && session_state_in.cards.len() > 0
-                    && session_state_in.cards.len()
-                        != user_settings.max_cards_per_session() as usize
-                {
-                    let db = db.clone();
-                    let session_state_in = session_state_in.clone();
-
-                    tokio::spawn(async move {
-                        match get_cards(
-                            db.clone(),
-                            &session_state_in.user_id,
-                            session_state_in.user_settings.max_cards_per_session() as usize,
-                        )
-                        .await
-                        {
-                            Ok((deck_names, cards)) => {
-                                while session_state_in.cards.len() > 0 {
-                                    let _ = session_state_in.cards.pop().is_some();
-                                }
-                                for card in cards {
-                                    session_state_in.cards.force_push(card);
-                                }
-                                session_state_in.deck_names.clear();
-                                for (id, name) in deck_names {
-                                    session_state_in.deck_names.insert(id, name);
-                                }
-                                info!("Updated session state with new cards and deck names");
-                                on_init(session_state_in).await;
-                            }
-                            Err(e) => {
-                                error!("Failed to fetch cards: {}", e);
-                            }
-                        }
-                    });
-                }
+                let session_state_in = session_state_in.clone();
+                let db = db.clone();
+                Self::refetch_cards_initial_change(session_state_in, db);
             }
         });
         let user_settings: Arc<UserSettings> = session.user_settings.clone();
@@ -503,42 +446,9 @@ impl AppState {
         session.events().on_system("settings_update", move |event| {
             if let SystemEvent::SettingsUpdate(settings) = event {
                 update_user_settings(user_settings.clone(), settings);
-                if !session_state_in.started.load(Ordering::Relaxed)
-                    && session_state_in.cards.len() > 0
-                    && session_state_in.cards.len()
-                        != user_settings.max_cards_per_session() as usize
-                {
-                    let db = db.clone();
-                    let session_state_in = session_state_in.clone();
-
-                    tokio::spawn(async move {
-                        match get_cards(
-                            db.clone(),
-                            &session_state_in.user_id,
-                            session_state_in.user_settings.max_cards_per_session() as usize,
-                        )
-                        .await
-                        {
-                            Ok((deck_names, cards)) => {
-                                while session_state_in.cards.len() > 0 {
-                                    let _ = session_state_in.cards.pop().is_some();
-                                }
-                                for card in cards {
-                                    session_state_in.cards.force_push(card);
-                                }
-                                session_state_in.deck_names.clear();
-                                for (id, name) in deck_names {
-                                    session_state_in.deck_names.insert(id, name);
-                                }
-                                info!("Updated session state with new cards and deck names");
-                                on_init(session_state_in).await;
-                            }
-                            Err(e) => {
-                                error!("Failed to fetch cards: {}", e);
-                            }
-                        }
-                    });
-                }
+                let session_state_in = session_state_in.clone();
+                let db = db.clone();
+                Self::refetch_cards_initial_change(session_state_in, db);
             }
         });
         let session_state_in = session_state.clone();
@@ -573,5 +483,44 @@ impl AppState {
         });
         // Default implementation - can be overridden
         Ok(())
+    }
+
+    fn refetch_cards_initial_change(session_state_in: Arc<SessionState>, db: Arc<PgPool>) {
+        if !session_state_in.started.load(Ordering::Relaxed)
+            && !session_state_in.cards.is_empty()
+            && session_state_in.cards.len()
+                != session_state_in.user_settings.max_cards_per_session() as usize
+        {
+            let db = db.clone();
+            let session_state_in = session_state_in.clone();
+
+            tokio::spawn(async move {
+                match get_cards(
+                    db.clone(),
+                    &session_state_in.user_id,
+                    session_state_in.user_settings.max_cards_per_session() as usize,
+                )
+                .await
+                {
+                    Ok((deck_names, cards)) => {
+                        while !session_state_in.cards.is_empty() {
+                            let _ = session_state_in.cards.pop().is_some();
+                        }
+                        for card in cards {
+                            session_state_in.cards.force_push(card);
+                        }
+                        session_state_in.deck_names.clear();
+                        for (id, name) in deck_names {
+                            session_state_in.deck_names.insert(id, name);
+                        }
+                        info!("Updated session state with new cards and deck names");
+                        on_init(session_state_in).await;
+                    }
+                    Err(e) => {
+                        error!("Failed to fetch cards: {}", e);
+                    }
+                }
+            });
+        }
     }
 }

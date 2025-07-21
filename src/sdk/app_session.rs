@@ -20,9 +20,9 @@ use crate::{
             HeadPositionData, LocationData, PhoneNotificationData, PhotoTakenData, StreamType,
             SystemEvent, TranscriptionData, TranslationData, VadData, VpsCoordinatesData,
         },
-        location_manager::{DisplayRequest, LayoutManager},
+        layout_manager::{DisplayRequest, LayoutManager},
     },
-    srs::UserSettings,
+    srs::{UserSettings, WebSocketSender},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -68,18 +68,7 @@ pub struct AppSession {
     pub reconnect_attempts: u32,
     pub event_manager: EventManager,
     pub layout_manager: LayoutManager,
-    pub websocket_sender: Option<
-        Arc<
-            Mutex<
-                futures_util::stream::SplitSink<
-                    tokio_tungstenite::WebSocketStream<
-                        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
-                    >,
-                    Message,
-                >,
-            >,
-        >,
-    >,
+    pub websocket_sender: WebSocketSender,
 }
 
 impl AppSession {
@@ -379,14 +368,21 @@ impl AppSession {
                             }
                         }
                         "head_position" => {
-                            if let Ok(head_position_data) =
-                                serde_json::from_value::<HeadPositionData>(data.clone())
-                            {
-                                debug!("👤 Head position: {}", head_position_data.position);
-                                event_manager.emit_stream_event(
-                                    &StreamType::HeadPosition,
-                                    &EventData::HeadPosition(head_position_data),
-                                );
+                            let res = serde_json::from_value::<HeadPositionData>(data.clone());
+                            match res {
+                                Ok(head_position_data) => {
+                                    debug!(
+                                        "👤 Head position: {}, Type: {}",
+                                        head_position_data.position, head_position_data.data_type
+                                    );
+                                    event_manager.emit_stream_event(
+                                        &StreamType::HeadPosition,
+                                        &EventData::HeadPosition(head_position_data),
+                                    );
+                                }
+                                Err(e) => {
+                                    warn!("⚠️ Failed to parse head position data: {e}");
+                                }
                             }
                         }
                         "button_press" => {
@@ -641,11 +637,6 @@ impl AppSession {
         }
     }
 
-    /// Check if session is still active/connected
-    pub fn is_connected(&self) -> bool {
-        self.connected && (now_millis() - self.last_updated) < 300000 // 5 minutes timeout
-    }
-
     /// Subscribe to event streams
     pub async fn subscribe_to_streams(&self, streams: Vec<String>) -> Result<()> {
         if !self.connected {
@@ -711,53 +702,9 @@ impl AppSession {
         &self.event_manager
     }
 
-    /// Get a reference to the layout manager for sending display requests
-    pub fn layouts(&self) -> &LayoutManager {
-        &self.layout_manager
-    }
-
     /// Send a text wall display
     pub async fn show_text(&self, text: impl Into<String>, duration_ms: Option<u64>) -> Result<()> {
         let display_request = self.layout_manager.show_text_wall(text, None, duration_ms);
-        self.send_display_request(&display_request).await
-    }
-
-    /// Send a double text wall display
-    pub async fn show_double_text(
-        &self,
-        top: impl Into<String>,
-        bottom: impl Into<String>,
-        duration_ms: Option<u64>,
-    ) -> Result<()> {
-        let display_request =
-            self.layout_manager
-                .show_double_text_wall(top, bottom, None, duration_ms);
-        self.send_display_request(&display_request).await
-    }
-
-    /// Send a reference card display
-    pub async fn show_card(
-        &self,
-        title: impl Into<String>,
-        text: impl Into<String>,
-        duration_ms: Option<u64>,
-    ) -> Result<()> {
-        let display_request =
-            self.layout_manager
-                .show_reference_card(title, text, None, duration_ms);
-        self.send_display_request(&display_request).await
-    }
-
-    /// Send a dashboard card display
-    pub async fn show_dashboard(
-        &self,
-        left_text: impl Into<String>,
-        right_text: impl Into<String>,
-        duration_ms: Option<u64>,
-    ) -> Result<()> {
-        let display_request =
-            self.layout_manager
-                .show_dashboard_card(left_text, right_text, None, duration_ms);
         self.send_display_request(&display_request).await
     }
 }

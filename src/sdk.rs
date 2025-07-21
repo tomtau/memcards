@@ -1,7 +1,7 @@
 pub(crate) mod app_session;
 mod event_manager;
 pub(crate) mod events;
-pub(crate) mod location_manager;
+pub(crate) mod layout_manager;
 
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
@@ -21,6 +21,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::srs::extract_settings;
 use tracing::{debug, error, info, warn};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -115,15 +116,7 @@ pub async fn auth_middleware(
         match verify_signed_user_token(&signed_user_token, &config.user_token_public_key) {
             Ok(uid) => {
                 user_id = Some(uid.clone());
-                cookies = cookies.add(
-                    cookie::Cookie::build(("aos_session", uid.clone()))
-                        .path("/")
-                        .http_only(true)
-                        .secure(true)
-                        .max_age(time::Duration::days(30))
-                        .same_site(cookie::SameSite::Lax)
-                        .build(),
-                );
+                cookies = add_signed_cookie(cookies, &uid);
                 info!("User ID verified from signed user token: {}", uid);
             }
             Err(e) => {
@@ -141,15 +134,7 @@ pub async fn auth_middleware(
         match verify_signed_user_token(auth_header, &config.user_token_public_key) {
             Ok(uid) => {
                 user_id = Some(uid.clone());
-                cookies = cookies.add(
-                    cookie::Cookie::build(("aos_session", uid.clone()))
-                        .path("/")
-                        .http_only(true)
-                        .secure(true)
-                        .max_age(time::Duration::days(30))
-                        .same_site(cookie::SameSite::Lax)
-                        .build(),
-                );
+                cookies = add_signed_cookie(cookies, &uid);
                 info!(
                     "User ID verified from JWT token in Authorization header: {}",
                     uid
@@ -161,15 +146,7 @@ pub async fn auth_middleware(
                 match verify_frontend_token(auth_header, &config.api_key) {
                     Some(uid) => {
                         user_id = Some(uid.clone());
-                        cookies = cookies.add(
-                            cookie::Cookie::build(("aos_session", uid.clone()))
-                                .path("/")
-                                .http_only(true)
-                                .secure(true)
-                                .max_age(time::Duration::days(30))
-                                .same_site(cookie::SameSite::Lax)
-                                .build(),
-                        );
+                        cookies = add_signed_cookie(cookies, &uid);
                         info!(
                             "User ID verified from frontend token in Authorization header: {}",
                             uid
@@ -196,15 +173,7 @@ pub async fn auth_middleware(
         {
             Ok(uid) => {
                 user_id = Some(uid.clone());
-                cookies = cookies.add(
-                    cookie::Cookie::build(("aos_session", uid.clone()))
-                        .path("/")
-                        .http_only(true)
-                        .secure(true)
-                        .max_age(time::Duration::days(30))
-                        .same_site(cookie::SameSite::Lax)
-                        .build(),
-                );
+                cookies = add_signed_cookie(cookies, &uid);
                 info!("User ID verified from temporary token: {}", uid);
             }
             Err(e) => {
@@ -217,15 +186,7 @@ pub async fn auth_middleware(
         match verify_frontend_token(&frontend_token, &config.api_key) {
             Some(uid) => {
                 user_id = Some(uid.clone());
-                cookies = cookies.add(
-                    cookie::Cookie::build(("aos_session", uid.clone()))
-                        .path("/")
-                        .http_only(true)
-                        .secure(true)
-                        .max_age(time::Duration::days(30))
-                        .same_site(cookie::SameSite::Lax)
-                        .build(),
-                );
+                cookies = add_signed_cookie(cookies, &uid);
                 info!("User ID verified from frontend user token: {}", uid);
             }
             None => {
@@ -245,6 +206,17 @@ pub async fn auth_middleware(
     Ok((cookies, resp).into_response())
 }
 
+fn add_signed_cookie(cookies: SignedCookieJar, uid: &str) -> SignedCookieJar {
+    cookies.add(
+        cookie::Cookie::build(("aos_session", uid.to_string()))
+            .path("/")
+            .http_only(true)
+            .secure(true)
+            .max_age(time::Duration::days(30))
+            .same_site(cookie::SameSite::Strict)
+            .build(),
+    )
+}
 // ==================== TOKEN EXCHANGE LOGIC ====================
 
 async fn exchange_token_with_cloud(
@@ -530,19 +502,11 @@ pub(crate) async fn settings_handler(
     let mut new_max_cards_per_session = None;
     let mut new_desired_retention = None;
     for setting in &payload.settings {
-        if let Some(key) = setting.get("key").and_then(|k| k.as_str()) {
-            if key == "max_cards_per_session" {
-                new_max_cards_per_session = setting
-                    .get("value")
-                    .and_then(|v| v.as_u64())
-                    .filter(|x| *x > 0 && *x <= 100);
-            } else if key == "desired_retention" {
-                new_desired_retention = setting
-                    .get("value")
-                    .and_then(|v| v.as_u64())
-                    .filter(|x| *x > 0 && *x <= 100);
-            }
-        }
+        extract_settings(
+            &mut new_max_cards_per_session,
+            &mut new_desired_retention,
+            setting,
+        );
     }
     let mut updated = 0;
     if new_desired_retention.is_some() || new_max_cards_per_session.is_some() {
