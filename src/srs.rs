@@ -166,6 +166,7 @@ async fn next_card_or_finish(text: String, session_state: &SessionState) {
         )
     } else {
         info!("All cards reviewed");
+        session_state.last_card.lock().await.take();
         session_state.layout_manager.show_text_wall(
             "All cards reviewed! You can end the session in the Mentra app\ninterface.",
             None,
