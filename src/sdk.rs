@@ -315,10 +315,10 @@ pub async fn webhook_handler(
                 match Url::parse(&ws_url).context("Invalid WebSocket URL") {
                     Ok(parsed_url) => match parsed_url.domain() {
                         Some(domain) => {
-                            let mut expected = config.cloud_domain.rsplitn(2, '.');
+                            let mut expected = config.cloud_domain.rsplitn(3, '.');
                             let expected_top_level = expected.next().unwrap_or("");
                             let expected_second_level = expected.next().unwrap_or("");
-                            let mut actual = domain.rsplitn(2, '.');
+                            let mut actual = domain.rsplitn(3, '.');
                             let actual_top_level = actual.next().unwrap_or("");
                             let actual_second_level = actual.next().unwrap_or("");
                             if expected_top_level != actual_top_level
