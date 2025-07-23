@@ -317,7 +317,13 @@ pub async fn webhook_handler(
                         Some(domain) if domain == config.cloud_domain => {
                             info!("WebSocket URL is valid: {}", domain)
                         }
-                        _ => {
+                        Some(domain) => {
+                            warn!(
+                                "WebSocket URL is not expected: {domain} (expected {})",
+                                config.cloud_domain
+                            );
+                        }
+                        None => {
                             error!("WebSocket URL has no valid domain");
                             return (
                                 StatusCode::BAD_REQUEST,
