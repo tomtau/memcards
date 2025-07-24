@@ -348,7 +348,7 @@ async fn get_cards(
         r#"
             SELECT * FROM flashcard
             WHERE deck_id IN (SELECT id FROM deck WHERE user_id = $1)
-            AND last_scheduled <= NOW() OR last_scheduled IS NULL
+            AND (last_scheduled <= NOW() OR last_scheduled IS NULL)
             ORDER BY last_scheduled NULLS LAST, id
             LIMIT $2
             "#,
