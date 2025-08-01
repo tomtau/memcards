@@ -345,17 +345,6 @@ impl AppSession {
                 // Extract and log the data payload
                 if let Some(data) = json_value.get("data") {
                     match stream_type {
-                        "transcription" => {
-                            if let Ok(transcription_data) =
-                                serde_json::from_value::<TranscriptionData>(data.clone())
-                            {
-                                info!("🎤 Transcription: {}", transcription_data.text);
-                                event_manager.emit_stream_event(
-                                    &StreamType::Transcription,
-                                    &EventData::Transcription(transcription_data),
-                                );
-                            }
-                        }
                         "translation" => {
                             if let Ok(translation_data) =
                                 serde_json::from_value::<TranslationData>(data.clone())
@@ -503,11 +492,23 @@ impl AppSession {
                             }
                         }
                         _ => {
-                            debug!("📊 Unknown stream data: {}", data);
-                            event_manager.emit_stream_event(
-                                &StreamType::All,
-                                &EventData::Generic(data.clone()),
-                            );
+                            if stream_type.starts_with("transcription") {
+                                if let Ok(transcription_data) =
+                                    serde_json::from_value::<TranscriptionData>(data.clone())
+                                {
+                                    info!("🎤 Transcription: {}", transcription_data.text);
+                                    event_manager.emit_stream_event(
+                                        &StreamType::Transcription,
+                                        &EventData::Transcription(transcription_data),
+                                    );
+                                }
+                            } else {
+                                warn!("📊 Unknown stream data: {}", data);
+                                event_manager.emit_stream_event(
+                                    &StreamType::All,
+                                    &EventData::Generic(data.clone()),
+                                );
+                            }
                         }
                     }
                 }
