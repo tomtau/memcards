@@ -168,7 +168,7 @@ async fn next_card_or_finish(text: String, session_state: &SessionState) {
         info!("All cards reviewed");
         session_state.last_card.lock().await.take();
         session_state.layout_manager.show_text_wall(
-            "All cards reviewed! You can end the session in the Mentra app\ninterface.",
+            "All cards reviewed! You can end the session in the Mentra app interface.",
             None,
             None,
         )
@@ -252,19 +252,21 @@ async fn on_transcription(text: String, session_state: Arc<SessionState>) -> Res
             next_card_or_finish(text, &session_state).await;
         } else if maybe_rating.is_err() {
             if let Some(card) = session_state.last_card.lock().await.as_ref() {
-                let back_text = if revealed {
-                    format!("{}\nunrecognised rating: {text}", card.back.clone())
-                } else {
-                    format!("Tilt your head up and down or say 'reveal' first\n'{text}'")
-                };
-                let display_request = session_state.layout_manager.show_double_text_wall(
-                    &card.front,
-                    back_text,
-                    None,
-                    None,
-                );
-                if let Err(e) = session_state.send_display_request(&display_request).await {
-                    error!("Failed to send display request: {e}");
+                if !text.contains("start") {
+                    let back_text = if revealed {
+                        format!("{}\nunrecognised rating: {text}", card.back.clone())
+                    } else {
+                        format!("Tilt your head up and down or say 'reveal' first\n'{text}'")
+                    };
+                    let display_request = session_state.layout_manager.show_double_text_wall(
+                        &card.front,
+                        back_text,
+                        None,
+                        None,
+                    );
+                    if let Err(e) = session_state.send_display_request(&display_request).await {
+                        error!("Failed to send display request: {e}");
+                    }
                 }
             }
         }
@@ -494,14 +496,16 @@ impl AppState {
             );
 
             // Send the transcription text back to the client using display_event
-            let text = transcription.text.clone();
-            let session_state: Arc<SessionState> = session_state.clone();
-            tokio::spawn(async move {
-                let session_state = session_state;
-                if let Err(e) = on_transcription(text, session_state.clone()).await {
-                    error!("Failed to process transcription: {}", e);
-                }
-            });
+            if transcription.is_final {
+                let text = transcription.text.clone();
+                let session_state: Arc<SessionState> = session_state.clone();
+                tokio::spawn(async move {
+                    let session_state = session_state;
+                    if let Err(e) = on_transcription(text, session_state.clone()).await {
+                        error!("Failed to process transcription: {}", e);
+                    }
+                });
+            }
         });
         // Default implementation - can be overridden
         Ok(())
