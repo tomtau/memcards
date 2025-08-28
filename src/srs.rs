@@ -255,7 +255,7 @@ async fn on_transcription(text: String, session_state: Arc<SessionState>) -> Res
                 if !text.contains("start") {
                     let back_text = if revealed {
                         format!(
-                            "{}\nunrecognised rating: {text}\n(say 'easy', 'good', 'difficult', or 'again')",
+                            "{}\nunrecognised rating: '{text}' (say 'easy', 'good', 'difficult', or 'again')",
                             card.back.clone()
                         )
                     } else {
