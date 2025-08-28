@@ -254,7 +254,10 @@ async fn on_transcription(text: String, session_state: Arc<SessionState>) -> Res
             if let Some(card) = session_state.last_card.lock().await.as_ref() {
                 if !text.contains("start") {
                     let back_text = if revealed {
-                        format!("{}\nunrecognised rating: {text}", card.back.clone())
+                        format!(
+                            "{}\nunrecognised rating: {text}\n(say 'easy', 'good', 'difficult', or 'again')",
+                            card.back.clone()
+                        )
                     } else {
                         format!("Tilt your head up and down or say 'reveal' first\n'{text}'")
                     };

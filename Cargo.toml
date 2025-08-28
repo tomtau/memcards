@@ -4,21 +4,21 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.99"
 askama = { version = "0.14.0" }
 axum = "0.8.1"
 axum-extra = { version = "0.10.1", features = ["cookie", "cookie-signed"] }
 chrono = "0.4.41"
 crossbeam-queue = "0.3.12"
 dashmap = "6.1.0"
-fsrs = "4.1.1"
+fsrs = "5.1.0"
 futures-util = "0.3.31"
 hex = "0.4.3"
 jsonwebtoken = "9.3.1"
-reqwest = { version = "0.12.22", features = ["json", "cookies", "rustls-tls"] }
+reqwest = { version = "0.12.23", features = ["json", "cookies", "rustls-tls"] }
 secrecy = "0.10.3"
 serde = { version = "1.0.189", features = ["derive"] }
-serde_json = "1.0.141"
+serde_json = "1.0.143"
 sha2 = "0.10.9"
 shuttle-axum = "0.56.0"
 shuttle-runtime = "0.56.0"
@@ -26,7 +26,7 @@ shuttle-shared-db = { version = "0.56.0", features = ["postgres", "sqlx"] }
 sqlx = { version = "0.8.2", features = ["chrono"] }
 subtle = "2.6.1"
 time = "0.3.41"
-tokio = "1.28.2"
+tokio = "1.47.1"
 tokio-stream = { version = "0.1.14", features = ["sync"] }
 tokio-tungstenite = { version = "0.27.0", features = ["native-tls"] }
 tracing = "0.1.41"
