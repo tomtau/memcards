@@ -321,8 +321,8 @@ pub async fn webhook_handler(
                             let mut actual = domain.rsplitn(3, '.');
                             let actual_top_level = actual.next().unwrap_or("");
                             let actual_second_level = actual.next().unwrap_or("");
-                            if expected_top_level != actual_top_level
-                                || expected_second_level != actual_second_level
+                            if (expected_top_level != actual_top_level
+                                && expected_second_level != actual_second_level)
                                     && (actual_top_level != "glass"
                                         && actual_second_level != "mentra")
                             {
