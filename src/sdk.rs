@@ -323,6 +323,8 @@ pub async fn webhook_handler(
                             let actual_second_level = actual.next().unwrap_or("");
                             if expected_top_level != actual_top_level
                                 || expected_second_level != actual_second_level
+                                    && (actual_top_level != "glass"
+                                        && actual_second_level != "mentra")
                             {
                                 error!(
                                     "WebSocket URL domain mismatch: expected {} but got {domain}",
