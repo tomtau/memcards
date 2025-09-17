@@ -496,7 +496,9 @@ impl AppSession {
                                 if let Ok(transcription_data) =
                                     serde_json::from_value::<TranscriptionData>(data.clone())
                                 {
-                                    debug!("🎤 Transcription: {}", transcription_data.text);
+                                    let text_len = transcription_data.text.len();
+                                    let trim_len = if text_len > 10 { 10 } else { text_len };
+                                    info!("🎤 Transcription: {}...", &transcription_data.text[..trim_len]);
                                     event_manager.emit_stream_event(
                                         &StreamType::Transcription,
                                         &EventData::Transcription(transcription_data),
