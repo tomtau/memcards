@@ -11,7 +11,7 @@ use crate::{
     config::AppConfig,
     routes,
     sdk::{
-        app_session::AppSession, auth_middleware, health_handler, settings_handler,
+        app_session::AppSession, auth::auth_middleware, health_handler, settings_handler,
         tool_get_handler, tool_handler, webhook_handler,
     },
 };

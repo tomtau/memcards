@@ -5,6 +5,7 @@ use reqwest::Url;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::{
+    fmt::Display,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -55,10 +56,32 @@ pub(super) fn now_millis() -> u64 {
         .as_millis() as u64
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone)]
+#[serde(transparent)]
+pub struct UserId(pub(crate) String);
+
+impl Display for UserId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // 3 chars from start and 9 from the end
+        let len = self.0.len();
+        if len > 12 {
+            write!(f, "{}...{}", &self.0[..3], &self.0[len - 9..])
+        } else {
+            write!(f, "{}", self.0)
+        }
+    }
+}
+
+impl From<String> for UserId {
+    fn from(s: String) -> Self {
+        UserId(s)
+    }
+}
+
 #[derive(Debug)]
 pub struct AppSession {
     pub session_id: String,
-    pub user_id: String,
+    pub user_id: UserId,
     pub package_name: String,
     pub api_key: SecretString,
     pub augmentos_websocket_url: Option<String>,
@@ -74,7 +97,7 @@ pub struct AppSession {
 impl AppSession {
     pub fn new(
         session_id: String,
-        user_id: String,
+        user_id: UserId,
         package_name: String,
         api_key: SecretString,
         augmentos_websocket_url: Option<String>,
@@ -498,7 +521,10 @@ impl AppSession {
                                 {
                                     let text_len = transcription_data.text.len();
                                     let trim_len = if text_len > 10 { 10 } else { text_len };
-                                    info!("🎤 Transcription: {}...", &transcription_data.text[..trim_len]);
+                                    info!(
+                                        "🎤 Transcription: {}...",
+                                        &transcription_data.text[..trim_len]
+                                    );
                                     event_manager.emit_stream_event(
                                         &StreamType::Transcription,
                                         &EventData::Transcription(transcription_data),

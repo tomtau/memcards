@@ -15,7 +15,7 @@ use crate::{
     models::{Deck, DeckNew, FlashcardImport},
     router::AppState,
     routes::{check_user_id, handle_render},
-    sdk::AuthUser,
+    sdk::auth::AuthUser,
     templates::{self},
 };
 

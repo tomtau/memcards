@@ -14,7 +14,7 @@ use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use tracing::{debug, error, info};
 
-use crate::sdk::layout_manager::LayoutManager;
+use crate::sdk::{app_session::UserId, layout_manager::LayoutManager};
 use crate::sdk::{events::SystemEvent, layout_manager::DisplayRequest};
 use crate::{
     models::{CardRating, Flashcard, FlashcardReviewNew},
@@ -117,7 +117,7 @@ pub struct SessionState {
     started: AtomicBool,
     revealed: AtomicBool,
     app_state: Arc<PgPool>,
-    user_id: String,
+    user_id: UserId,
     last_card: Arc<Mutex<Option<Flashcard>>>,
     user_settings: Arc<UserSettings>,
     sender: WebSocketSender,
@@ -206,7 +206,7 @@ async fn update_rating(
     .bind(update.stability)
     .bind(update.difficulty)
     .bind(update.flashcard_id)
-    .bind(session_state.user_id.clone())
+    .bind(&session_state.user_id.0)
     .fetch_optional(&*session_state.app_state)
     .await?;
     if flashcard.is_none() {
@@ -326,7 +326,7 @@ pub(crate) fn extract_settings(
 
 async fn get_cards(
     db: Arc<PgPool>,
-    user_id: &str,
+    user_id: &UserId,
     limit: usize,
 ) -> Result<(DashMap<i32, String>, ArrayQueue<Flashcard>)> {
     let deck_names = sqlx::query(
@@ -334,7 +334,7 @@ async fn get_cards(
             SELECT id, name FROM deck WHERE user_id = $1
             "#,
     )
-    .bind(user_id)
+    .bind(&user_id.0)
     .fetch_all(&*db)
     .await?;
 
@@ -358,7 +358,7 @@ async fn get_cards(
             LIMIT $2
             "#,
     )
-    .bind(user_id)
+    .bind(&user_id.0)
     .bind(limit as i64)
     .fetch_all(&*db)
     .await?;
@@ -399,7 +399,7 @@ impl AppState {
         &self,
         session: &AppSession,
         session_id: &str,
-        user_id: &str,
+        user_id: &UserId,
     ) -> Result<()> {
         info!(
             "🚀 Default session handling for session {} and user {}",
@@ -448,7 +448,7 @@ impl AppState {
             started: AtomicBool::new(false),
             revealed: AtomicBool::new(false),
             app_state: self.db.clone(),
-            user_id: user_id.to_string(),
+            user_id: user_id.clone(),
             last_card: Arc::new(Mutex::new(None)),
             user_settings: session.user_settings.clone(),
             sender: sender_clone,

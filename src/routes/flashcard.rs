@@ -14,7 +14,7 @@ use crate::{
     models::{Deck, Flashcard, FlashcardNew, FlashcardUpdate},
     router::AppState,
     routes::{check_user_id, handle_render},
-    sdk::AuthUser,
+    sdk::{app_session::UserId, auth::AuthUser},
     templates::{FlashcardListTemplate, FlashcardTemplate, FlashcardsTemplate},
 };
 
@@ -26,7 +26,7 @@ pub struct PaginationQuery {
 
 async fn get_deck_and_cards(
     state: Arc<AppState>,
-    user_id: Option<String>,
+    user_id: Option<UserId>,
     deck_id: i32,
 ) -> Result<(Deck, Vec<Flashcard>), ApiError> {
     let user_id = check_user_id(user_id)?;
@@ -52,7 +52,7 @@ async fn get_deck_and_cards(
 
 async fn get_deck_and_cards_paginated(
     state: Arc<AppState>,
-    user_id: Option<String>,
+    user_id: Option<UserId>,
     deck_id: i32,
     page: u32,
     limit: u32,
