@@ -493,7 +493,7 @@ impl AppState {
             tokio::spawn(on_reveal(session_state_in.clone()));
         });
         session.events().on_transcription(move |transcription| {
-            info!(
+            debug!(
                 "🎤 Received transcription: {} (final: {})",
                 transcription.text, transcription.is_final
             );
