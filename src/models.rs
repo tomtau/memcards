@@ -1,3 +1,4 @@
+//! Models for the database
 use std::{fmt::Display, str::FromStr};
 
 use chrono::NaiveDateTime;
@@ -13,12 +14,6 @@ pub struct Deck {
 
 #[derive(sqlx::FromRow, Serialize, Deserialize, Debug, Clone)]
 pub struct DeckNew {
-    pub name: String,
-}
-
-#[derive(sqlx::FromRow, Serialize, Deserialize, Debug, Clone)]
-pub struct DeckRename {
-    pub id: i32,
     pub name: String,
 }
 

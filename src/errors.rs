@@ -1,3 +1,4 @@
+//! Error handling for the API
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 

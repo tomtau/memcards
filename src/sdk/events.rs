@@ -1,3 +1,5 @@
+//! Event types and data structures for the event manager
+//! TODO: most events aren't used here, so they can perhaps be removed
 use serde::{Deserialize, Serialize};
 
 /// Event types that can be emitted by the event manager

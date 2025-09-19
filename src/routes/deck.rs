@@ -1,3 +1,4 @@
+//! Handlers for deck-related routes.
 use std::sync::Arc;
 
 use askama::Template;
@@ -31,7 +32,7 @@ pub async fn fetch_decks(
 
     // Calculate statistics for all flashcards across all decks
     let stats_query = r#"
-        SELECT 
+        SELECT
             COUNT(CASE WHEN last_rating IS NULL THEN 1 END) as new_count,
             COUNT(CASE WHEN last_scheduled IS NOT NULL AND last_scheduled <= NOW() THEN 1 END) as for_review_count,
             COUNT(CASE WHEN last_scheduled IS NOT NULL AND last_scheduled > NOW() THEN 1 END) as learning_count

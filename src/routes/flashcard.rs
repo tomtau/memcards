@@ -1,3 +1,4 @@
+//! Flashcard-related routes and handlers
 use std::sync::Arc;
 
 use askama::Template;
@@ -171,8 +172,8 @@ pub async fn update_flashcard(
     // Verify the user owns the flashcard through the deck
     let flashcard = sqlx::query_as::<_, Flashcard>(
         r#"
-        UPDATE flashcard 
-        SET front = $1, back = $2 
+        UPDATE flashcard
+        SET front = $1, back = $2
         WHERE id = $3 AND deck_id IN (
             SELECT id FROM deck WHERE user_id = $4
         )
@@ -205,7 +206,7 @@ pub async fn delete_flashcard(
 
     let result = sqlx::query(
         r#"
-        DELETE FROM flashcard 
+        DELETE FROM flashcard
         WHERE id = $1 AND deck_id IN (
             SELECT id FROM deck WHERE user_id = $2
         )
@@ -234,7 +235,7 @@ pub async fn get_flashcard(
     // Get flashcard with reviews
     let flashcard = sqlx::query_as::<_, Flashcard>(
         r#"
-        SELECT 
+        SELECT
             *
         FROM flashcard f
         WHERE f.id = $1 AND f.deck_id IN (

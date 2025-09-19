@@ -1,3 +1,4 @@
+//! Event Manager for handling WebSocket events and user subscriptions
 use dashmap::{DashMap, DashSet};
 use std::sync::Arc;
 use tracing::error;

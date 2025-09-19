@@ -1,3 +1,4 @@
+//! Router initialization and route definitions for the MemCards application.
 use std::sync::Arc;
 
 use axum::{

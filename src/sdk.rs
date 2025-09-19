@@ -1,3 +1,5 @@
+//! SDK module for handling sessions, authentication, events, and layout management.
+//! This module (and its sub-modules) provides the core functionality for interacting with the AugmentOS/MentraOS platform.
 pub(crate) mod app_session;
 pub(crate) mod auth;
 mod event_manager;

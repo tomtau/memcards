@@ -1,17 +1,8 @@
+//! Layout manager for AR display control
+//! TODO: the dashboard / bitmap views aren't used, so they can perhaps be removed
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
-
-/// Layout types for AR display
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum LayoutType {
-    TextWall,
-    DoubleTextWall,
-    ReferenceCard,
-    DashboardCard,
-    BitmapView,
-}
 
 /// View types for display
 #[derive(Debug, Clone, Serialize, Deserialize)]

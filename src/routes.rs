@@ -1,3 +1,4 @@
+//! All route handlers for the application.
 mod deck;
 mod flashcard;
 

@@ -1,3 +1,4 @@
+//! Templates for rendering HTML pages using Askama.
 use crate::models;
 use askama::Template;
 

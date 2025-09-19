@@ -1,3 +1,4 @@
+//! Authentication middleware and token verification logic.
 use crate::{config::AppConfig, router::AppState, sdk::app_session::UserId};
 use anyhow::{Context, Result, bail};
 use axum::{

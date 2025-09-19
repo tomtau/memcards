@@ -1,3 +1,5 @@
+//! The partial port of the AugmentOS/MentraOS Cloud WebSocket connection and session management
+//! (TPA = Third-Party App).
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};

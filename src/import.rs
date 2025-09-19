@@ -1,3 +1,5 @@
+//! Module for importing flashcards from Anki exported text files into the database.
+//! ref: https://docs.ankiweb.net/exporting.html#text-files
 use std::collections::HashMap;
 
 use anyhow::Result;

@@ -1,3 +1,4 @@
+//! Application configuration structure
 use axum_extra::extract::cookie::Key;
 use secrecy::SecretString;
 

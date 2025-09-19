@@ -1,3 +1,4 @@
+//! Spaced Repetition System (SRS) logic for flashcard review sessions.
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU8, Ordering},
@@ -190,9 +191,9 @@ async fn update_rating(
     )?;
     let flashcard = sqlx::query_as::<_, Flashcard>(
         r#"
-        UPDATE flashcard 
-        SET last_rating = $1, 
-            last_reviewed = $2, 
+        UPDATE flashcard
+        SET last_rating = $1,
+            last_reviewed = $2,
             last_scheduled = $3,
             last_stability = $4,
             last_difficulty = $5
@@ -498,7 +499,6 @@ impl AppState {
                 transcription.text, transcription.is_final
             );
 
-            // Send the transcription text back to the client using display_event
             if transcription.is_final {
                 let text = transcription.text.clone();
                 let session_state: Arc<SessionState> = session_state.clone();
@@ -510,7 +510,6 @@ impl AppState {
                 });
             }
         });
-        // Default implementation - can be overridden
         Ok(())
     }
 
