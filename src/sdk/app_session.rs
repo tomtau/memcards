@@ -67,7 +67,12 @@ impl Display for UserId {
         // 3 chars from start and 9 from the end
         let len = self.0.len();
         if len > 12 {
-            write!(f, "{}...{}", &self.0[..3], &self.0[len - 9..])
+            write!(
+                f,
+                "{}...{}",
+                &self.0.get(..3).unwrap_or_default(),
+                &self.0.get(len - 9..).unwrap_or_default()
+            )
         } else {
             write!(f, "{}", self.0)
         }
@@ -525,7 +530,10 @@ impl AppSession {
                                     let trim_len = if text_len > 10 { 10 } else { text_len };
                                     info!(
                                         "🎤 Transcription: {}...",
-                                        &transcription_data.text[..trim_len]
+                                        &transcription_data
+                                            .text
+                                            .get(..trim_len)
+                                            .unwrap_or_default()
                                     );
                                     event_manager.emit_stream_event(
                                         &StreamType::Transcription,

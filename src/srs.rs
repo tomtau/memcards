@@ -251,9 +251,9 @@ async fn on_transcription(text: String, session_state: Arc<SessionState>) -> Res
                 }
             }
             next_card_or_finish(text, &session_state).await;
-        } else if maybe_rating.is_err() {
-            if let Some(card) = session_state.last_card.lock().await.as_ref() {
-                if !text.contains("start") {
+        } else if maybe_rating.is_err()
+            && let Some(card) = session_state.last_card.lock().await.as_ref()
+                && !text.contains("start") {
                     let back_text = if revealed {
                         format!(
                             "{}\nunrecognised rating: '{text}' (say 'easy', 'good', 'difficult', or 'again')",
@@ -272,8 +272,6 @@ async fn on_transcription(text: String, session_state: Arc<SessionState>) -> Res
                         error!("Failed to send display request: {e}");
                     }
                 }
-            }
-        }
     } else if text.contains("start") {
         session_state.started.store(true, Ordering::Relaxed);
         info!(
