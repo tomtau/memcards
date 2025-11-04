@@ -253,25 +253,26 @@ async fn on_transcription(text: String, session_state: Arc<SessionState>) -> Res
             next_card_or_finish(text, &session_state).await;
         } else if maybe_rating.is_err()
             && let Some(card) = session_state.last_card.lock().await.as_ref()
-                && !text.contains("start") {
-                    let back_text = if revealed {
-                        format!(
-                            "{}\nunrecognised rating: '{text}' (say 'easy', 'good', 'difficult', or 'again')",
-                            card.back.clone()
-                        )
-                    } else {
-                        format!("Tilt your head up and down or say 'reveal' first\n'{text}'")
-                    };
-                    let display_request = session_state.layout_manager.show_double_text_wall(
-                        &card.front,
-                        back_text,
-                        None,
-                        None,
-                    );
-                    if let Err(e) = session_state.send_display_request(&display_request).await {
-                        error!("Failed to send display request: {e}");
-                    }
-                }
+            && !text.contains("start")
+        {
+            let back_text = if revealed {
+                format!(
+                    "{}\nunrecognised rating: '{text}' (say 'easy', 'good', 'difficult', or 'again')",
+                    card.back.clone()
+                )
+            } else {
+                format!("Tilt your head up and down or say 'reveal' first\n'{text}'")
+            };
+            let display_request = session_state.layout_manager.show_double_text_wall(
+                &card.front,
+                back_text,
+                None,
+                None,
+            );
+            if let Err(e) = session_state.send_display_request(&display_request).await {
+                error!("Failed to send display request: {e}");
+            }
+        }
     } else if text.contains("start") {
         session_state.started.store(true, Ordering::Relaxed);
         info!(

@@ -102,6 +102,8 @@ pub async fn webhook_handler(
                             if (expected_top_level != actual_top_level
                                 && expected_second_level != actual_second_level)
                                 && (actual_top_level != "glass" && actual_second_level != "mentra")
+                                && (actual_top_level != "com"
+                                    && actual_second_level != "mentraglass")
                             {
                                 error!(
                                     "WebSocket URL domain mismatch: expected {} but got {domain}",
