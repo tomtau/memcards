@@ -8,7 +8,7 @@ anyhow = "1.0.100"
 askama = { version = "0.14.0" }
 axum = "0.8.6"
 axum-extra = { version = "0.12.1", features = ["cookie", "cookie-signed"] }
-chrono = "0.4.42"
+chrono = { version = "0.4.42", features = ["serde"] }
 crossbeam-queue = "0.3.12"
 dashmap = "6.1.0"
 fsrs = "5.2.0"
@@ -20,13 +20,11 @@ secrecy = "0.10.3"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
-shuttle-axum = "0.57.0"
-shuttle-runtime = "0.57.0"
-shuttle-shared-db = { version = "0.57.0", features = ["postgres", "sqlx"] }
-sqlx = { version = "0.8.2", features = ["chrono"] }
+sqlx = { version = "0.8.2", features = ["chrono", "runtime-tokio", "postgres"] }
 subtle = "2.6.1"
 time = "0.3.44"
-tokio = "1.48.0"
+tokio = { version = "1.48.0", features = ["full"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
 tokio-tungstenite = { version = "0.28.0", features = ["native-tls"] }
 tracing = "0.1.41"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

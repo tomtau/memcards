@@ -1,17 +1,23 @@
 # MemCards
 
 MemCards is a flashcard learning app designed for smart glasses, such as Even Realities G1, in MentraOS.
-The card management frontend uses HTMX and Alpine.js, the backend uses Axum as a web server, Askama as a template renderer, and sqlx with PostgreSQL as a data store. The deployment uses Shuttle.
+The card management frontend uses HTMX and Alpine.js, the backend uses Axum as a web server, Askama as a template renderer, and SQLx with PostgreSQL as a data store.
 The Spaced Repetition System scheduling is currently done using the Free Spaced Repetition Scheduler ([FSRS](https://github.com/open-spaced-repetition/fsrs4anki/wiki/The-Algorithm)) algorithm.
 
 ## Prerequisites
 
 Create an application in the [Mentra developer console](https://console.mentra.glass) and get the API key and package name.
 
-Insert the API and package name in the `Secrets.toml` (or `Secrets.dev.toml`) file:
-```toml
-API_KEY = '...'
-PACKAGE_NAME = '...'
+Set the following environment variables (or use a `.env` file):
+```bash
+DATABASE_URL=postgres://user:password@localhost:5432/memcards
+API_KEY=your_api_key
+PACKAGE_NAME=your_package_name
+# Optional:
+HOST=127.0.0.1  # Default: 127.0.0.1
+PORT=8000  # Default: 8000
+CLOUD_API_URL=https://prod.augmentos.cloud  # Default
+USER_TOKEN_PUBLIC_KEY=...  # Optional, has a default value
 ```
 
 For the app configuration, you can modify and import the following `app_config.json`:
@@ -58,19 +64,48 @@ For the app configuration, you can modify and import the following `app_config.j
 
 At the time of writing, the `app_config.json` file did not contain the Hardware Requirements section. You can add it manually in the developer console (you can add "Display" and "Microphone").
 
-Besides the Mentra app setup, you need to install [Shuttle](https://docs.shuttle.dev/getting-started/installation), the Rust toolchain, and Docker.
+You need to install the Rust toolchain and have access to a PostgreSQL database.
 
-## Local development or self-hosting
+## Local development
 
-You can run the local instance with `shuttle run`.
+1. Make sure you have a PostgreSQL database running and set the `DATABASE_URL` environment variable.
 
-If you want to self-host the application and you need it to listen on 0.0.0.0 instead of localhost, you can use the following command: `shuttle run --external --release --port <port>`
+2. Run the application:
+   ```bash
+   cargo run
+   ```
 
-The local instance will use Docker to run a PostgreSQL database. If you need it to connect to a custom external database instance, you can add the database connection string on the `main` method in `src/main.rs` as described in the [Shuttle documentation](https://docs.shuttle.dev/docs/local-run#local-runs-with-databases).
+   The server will start on `127.0.0.1:8000` by default. You can change this using the `HOST` and `PORT` environment variables.
 
-## Deployment
+3. To listen on all interfaces (e.g., for external access or Docker), set:
+   ```bash
+   HOST=0.0.0.0
+   ```
 
-If you have created the application in the Shuttle console, you can deploy it with: `shuttle deploy`.
+## Database Migrations
+
+The application automatically runs migrations on startup using SQLx. Migration files are located in the `migrations` directory.
+
+## Self-Hosting / Deployment
+
+1. Set up a PostgreSQL database and note the connection string.
+
+2. Set the required environment variables:
+   ```bash
+   export DATABASE_URL="postgres://user:password@host:5432/memcards"
+   export API_KEY="your_api_key"
+   export PACKAGE_NAME="your_package_name"
+   export HOST="0.0.0.0"
+   export PORT="8000"
+   ```
+
+3. Build and run the release binary:
+   ```bash
+   cargo build --release
+   ./target/release/memcards
+   ```
+
+Alternatively, you can use Docker or any container platform to deploy the application.
 
 ## Misc
 
