@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!()
         .run(&pool)
         .await
-        .expect("Failed to run migrations");
+        .context("Failed to run migrations")?;
 
     let cloud_api_url = env::var("CLOUD_API_URL")
         .unwrap_or_else(|_| "https://prod.augmentos.cloud".to_string());
@@ -69,7 +69,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Get the host and port from environment variables or use defaults
     let host = env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let port = env::var("PORT").unwrap_or_else(|_| "8000".to_string());
+    let port: u16 = env::var("PORT")
+        .unwrap_or_else(|_| "8000".to_string())
+        .parse()
+        .context("PORT must be a valid port number (0-65535)")?;
     let addr = format!("{}:{}", host, port);
 
     info!("Starting server on {}", addr);
